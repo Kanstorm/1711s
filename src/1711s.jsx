@@ -23,7 +23,7 @@ if (!window.storage) {
 const AppContext = createContext(null);
 
 const MEMBERS = [
-  { id: "m1", name: "Boomer", avatar: "BO", joinDate: "2025-01-15" },
+  { id: "m1", name: "Boomer", avatar: "BO", joinDate: "2025-01-15", admin: true },
   { id: "m2", name: "Keaton", avatar: "KE", joinDate: "2025-01-15" },
   { id: "m3", name: "Ryan", avatar: "RY", joinDate: "2025-01-20" },
   { id: "m4", name: "Tripp", avatar: "TR", joinDate: "2025-02-01" },
@@ -148,6 +148,8 @@ function getSeedData() {
     readInvites: [],
     bibleProgress: {},
     prestigeLevel: {},
+    customSeals: [],
+    pinnedThreads: [],
   };
 }
 
@@ -379,6 +381,7 @@ function Avatar({ member, size = 40, showTitle = true }) {
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           <span style={{ fontWeight: 600, fontSize: size > 36 ? 15 : 13, color: "#E8E0D0" }}>{member.name}</span>
+          {member.admin && <span className="admin-badge">ADMIN</span>}
           {prestige > 0 && <PrestigeEmblem level={prestige} size={size > 36 ? 22 : 18} />}
           {showTitle && data.equippedTitles?.[member.id] && (
             <GlowTitle title={data.equippedTitles[member.id]} color={seal?.color} />
@@ -721,10 +724,20 @@ function HomePage() {
 // PAGE: TRIUMPHS / SEALS
 // ═══════════════════════════════════════════
 function TriumphsPage() {
-  const { data, currentUser } = useContext(AppContext);
+  const { data, setData, currentUser, isAdmin } = useContext(AppContext);
   const [selectedSeal, setSelectedSeal] = useState(null);
   const myProgress = data.triumphProgress?.[currentUser.id] || {};
   const myCompletedSeals = data.completedSeals?.[currentUser.id] || [];
+
+  // Admin state
+  const [showCreateSeal, setShowCreateSeal] = useState(false);
+  const [newSeal, setNewSeal] = useState({ name: "", subtitle: "", description: "", icon: "✦", color: "#D4AF37" });
+  const [editingSeal, setEditingSeal] = useState(null);
+  const [showAddTriumph, setShowAddTriumph] = useState(null); // sealId
+  const [newTriumph, setNewTriumph] = useState({ name: "", desc: "", target: 1 });
+  const [editingTriumph, setEditingTriumph] = useState(null);
+
+  const allSeals = [...SEAL_DEFINITIONS, ...(data.customSeals || [])];
 
   function getSealProgress(seal) {
     let completed = 0;
@@ -734,13 +747,98 @@ function TriumphsPage() {
     return { completed, total: seal.triumphs.length, isComplete: completed === seal.triumphs.length };
   }
 
+  // Admin: Create new seal
+  function createSeal() {
+    if (!newSeal.name) return;
+    const seal = {
+      id: `seal-${Date.now()}`, ...newSeal, triumphs: [],
+    };
+    setData(d => ({ ...d, customSeals: [...(d.customSeals || []), seal] }));
+    setNewSeal({ name: "", subtitle: "", description: "", icon: "✦", color: "#D4AF37" });
+    setShowCreateSeal(false);
+  }
+
+  // Admin: Update seal details
+  function saveSealEdit() {
+    if (!editingSeal) return;
+    setData(d => ({
+      ...d,
+      customSeals: (d.customSeals || []).map(s => s.id === editingSeal.id ? editingSeal : s),
+    }));
+    setEditingSeal(null);
+  }
+
+  // Admin: Delete custom seal
+  function deleteSeal(sealId) {
+    setData(d => ({ ...d, customSeals: (d.customSeals || []).filter(s => s.id !== sealId) }));
+    setSelectedSeal(null);
+  }
+
+  // Admin: Add triumph to a seal
+  function addTriumph(sealId) {
+    if (!newTriumph.name) return;
+    const triumph = { id: `t${Date.now()}`, name: newTriumph.name, desc: newTriumph.desc, type: "custom", target: parseInt(newTriumph.target) || 1 };
+    setData(d => ({
+      ...d,
+      customSeals: (d.customSeals || []).map(s =>
+        s.id === sealId ? { ...s, triumphs: [...s.triumphs, triumph] } : s
+      ),
+    }));
+    setNewTriumph({ name: "", desc: "", target: 1 });
+    setShowAddTriumph(null);
+  }
+
+  // Admin: Delete triumph from custom seal
+  function deleteTriumph(sealId, triumphId) {
+    setData(d => ({
+      ...d,
+      customSeals: (d.customSeals || []).map(s =>
+        s.id === sealId ? { ...s, triumphs: s.triumphs.filter(t => t.id !== triumphId) } : s
+      ),
+    }));
+  }
+
+  // Admin: Edit triumph
+  function saveTriumphEdit(sealId) {
+    if (!editingTriumph) return;
+    setData(d => ({
+      ...d,
+      customSeals: (d.customSeals || []).map(s =>
+        s.id === sealId ? { ...s, triumphs: s.triumphs.map(t => t.id === editingTriumph.id ? editingTriumph : t) } : s
+      ),
+    }));
+    setEditingTriumph(null);
+  }
+
+  // Admin: manually adjust triumph progress for any user
+  function adjustProgress(triumphId, memberId, delta) {
+    setData(d => {
+      const tp = { ...(d.triumphProgress || {}) };
+      const mp = { ...(tp[memberId] || {}) };
+      mp[triumphId] = Math.max(0, (mp[triumphId] || 0) + delta);
+      tp[memberId] = mp;
+      return { ...d, triumphProgress: tp };
+    });
+  }
+
+  const isCustomSeal = (sealId) => (data.customSeals || []).some(s => s.id === sealId);
+
+  const SEAL_ICONS = ["✦", "⚡", "◆", "※", "∞", "†", "★", "◈", "⬥", "▲", "●", "⊕"];
+  const SEAL_COLORS = ["#D4AF37", "#C0392B", "#2980B9", "#8E44AD", "#F39C12", "#27AE60", "#E74C3C", "#1ABC9C", "#9B59B6", "#E67E22"];
+
   return (
     <div className="page-content">
       <div className="page-header">
         <Trophy size={24} style={{ color: "#D4AF37" }} />
         <h2>TRIUMPHS</h2>
+        {isAdmin && (
+          <button className="gold-btn" onClick={() => setShowCreateSeal(true)}><Plus size={14} /> New Seal</button>
+        )}
       </div>
-      <p style={{ color: "#8A7E6B", margin: "-8px 0 20px", fontSize: 14 }}>Complete all triumphs within a seal to earn the title</p>
+      <p style={{ color: "#8A7E6B", margin: "-8px 0 20px", fontSize: 14 }}>
+        Complete all triumphs within a seal to earn the title
+        {isAdmin && <span style={{ color: "#C0392B", fontSize: 11, marginLeft: 8 }}>ADMIN</span>}
+      </p>
 
       {/* Earned Titles */}
       {myCompletedSeals.length > 0 && (
@@ -748,7 +846,7 @@ function TriumphsPage() {
           <div className="section-title" style={{ marginBottom: 12 }}>EARNED TITLES</div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             {myCompletedSeals.map(sId => {
-              const seal = SEAL_DEFINITIONS.find(s => s.id === sId);
+              const seal = allSeals.find(s => s.id === sId);
               return (
                 <div key={sId} className="earned-title-badge" style={{ borderColor: seal?.color }}>
                   <span style={{ fontSize: 24 }}>{seal?.icon}</span>
@@ -761,9 +859,10 @@ function TriumphsPage() {
       )}
 
       <div className="seals-grid">
-        {SEAL_DEFINITIONS.map(seal => {
+        {allSeals.map(seal => {
           const { completed, total, isComplete } = getSealProgress(seal);
           const isExpanded = selectedSeal === seal.id;
+          const isCustom = isCustomSeal(seal.id);
           return (
             <Panel
               key={seal.id}
@@ -779,11 +878,12 @@ function TriumphsPage() {
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <h3 className="seal-name" style={{ color: isComplete ? seal.color : "#E8E0D0" }}>{seal.name}</h3>
                     {isComplete && <Check size={16} style={{ color: seal.color }} />}
+                    {isCustom && <span style={{ fontSize: 9, color: "#6B6152", border: "1px solid #3A3428", padding: "1px 5px", borderRadius: 3, fontFamily: "'Rajdhani', sans-serif", letterSpacing: 1 }}>CUSTOM</span>}
                   </div>
                   <div style={{ color: "#6B6152", fontSize: 11, textTransform: "uppercase", letterSpacing: 1 }}>{seal.subtitle}</div>
                   <p style={{ color: "#8A7E6B", fontSize: 13, margin: "4px 0 8px" }}>{seal.description}</p>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <ProgressBar value={completed} max={total} color={seal.color} />
+                    <ProgressBar value={completed} max={total || 1} color={seal.color} />
                     <span style={{ color: seal.color, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>{completed}/{total}</span>
                   </div>
                 </div>
@@ -791,7 +891,7 @@ function TriumphsPage() {
               </div>
 
               {isExpanded && (
-                <div className="seal-triumphs">
+                <div className="seal-triumphs" onClick={e => e.stopPropagation()}>
                   <DiamondDivider />
                   {seal.triumphs.map(t => {
                     const progress = myProgress[t.id] || 0;
@@ -808,9 +908,45 @@ function TriumphsPage() {
                         <span style={{ color: done ? seal.color : "#6B6152", fontSize: 13, fontWeight: 600 }}>
                           {Math.min(progress, t.target)}/{t.target}
                         </span>
+                        {isAdmin && (
+                          <div style={{ display: "flex", gap: 2, marginLeft: 8 }}>
+                            <button className="admin-sm-btn" onClick={() => adjustProgress(t.id, currentUser.id, 1)}>+</button>
+                            <button className="admin-sm-btn" onClick={() => adjustProgress(t.id, currentUser.id, -1)}>-</button>
+                            {isCustom && (
+                              <>
+                                <button className="admin-sm-btn" onClick={() => setEditingTriumph({ ...t, sealId: seal.id })} style={{ color: "#2B9EB3" }}>
+                                  <Edit3 size={10} />
+                                </button>
+                                <button className="admin-sm-btn" onClick={() => deleteTriumph(seal.id, t.id)} style={{ color: "#C0392B" }}>
+                                  <X size={10} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
+                  {isAdmin && isCustom && (
+                    <button className="admin-add-btn" onClick={(e) => { e.stopPropagation(); setShowAddTriumph(seal.id); }}>
+                      <Plus size={12} /> Add Triumph
+                    </button>
+                  )}
+                  {isAdmin && isCustom && (
+                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                      <button className="admin-add-btn" style={{ color: "#2B9EB3", borderColor: "#2B9EB322" }} onClick={(e) => { e.stopPropagation(); setEditingSeal({ ...seal }); }}>
+                        <Edit3 size={12} /> Edit Seal
+                      </button>
+                      <button className="admin-add-btn" style={{ color: "#C0392B", borderColor: "#C0392B22" }} onClick={(e) => { e.stopPropagation(); deleteSeal(seal.id); }}>
+                        <X size={12} /> Delete Seal
+                      </button>
+                    </div>
+                  )}
+                  {isAdmin && !isCustom && (
+                    <div style={{ marginTop: 10, padding: "6px 10px", background: "rgba(107,97,82,0.08)", borderRadius: 4, fontSize: 11, color: "#6B6152" }}>
+                      Built-in seal — use +/- to adjust progress. Create custom seals for full editing.
+                    </div>
+                  )}
                 </div>
               )}
             </Panel>
@@ -825,7 +961,7 @@ function TriumphsPage() {
           <div className="leaderboard">
             {MEMBERS.map(m => {
               const mSeals = data.completedSeals?.[m.id] || [];
-              const mTitles = mSeals.map(sId => SEAL_DEFINITIONS.find(s => s.id === sId)).filter(Boolean);
+              const mTitles = mSeals.map(sId => allSeals.find(s => s.id === sId)).filter(Boolean);
               return (
                 <div key={m.id} className="leaderboard-row">
                   <Avatar member={m} size={32} />
@@ -841,6 +977,94 @@ function TriumphsPage() {
           </div>
         </Panel>
       </div>
+
+      {/* Admin: Create Seal Modal */}
+      <Modal open={showCreateSeal} onClose={() => setShowCreateSeal(false)} title="Create New Seal">
+        <div style={{ padding: 16 }}>
+          <label className="input-label">Seal Name</label>
+          <input className="text-input" value={newSeal.name} onChange={e => setNewSeal(s => ({ ...s, name: e.target.value }))} placeholder="e.g. Evangelist" />
+          <label className="input-label">Subtitle</label>
+          <input className="text-input" value={newSeal.subtitle} onChange={e => setNewSeal(s => ({ ...s, subtitle: e.target.value }))} placeholder="e.g. Matthew 28:19" />
+          <label className="input-label">Description</label>
+          <textarea className="text-input" rows={2} value={newSeal.description} onChange={e => setNewSeal(s => ({ ...s, description: e.target.value }))} placeholder="What this seal represents..." />
+          <label className="input-label">Icon</label>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+            {SEAL_ICONS.map(ic => (
+              <button key={ic} className={`admin-icon-btn ${newSeal.icon === ic ? "selected" : ""}`}
+                style={newSeal.icon === ic ? { borderColor: newSeal.color, background: `${newSeal.color}22` } : {}}
+                onClick={() => setNewSeal(s => ({ ...s, icon: ic }))}>{ic}</button>
+            ))}
+          </div>
+          <label className="input-label">Color</label>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+            {SEAL_COLORS.map(c => (
+              <button key={c} className={`admin-color-btn ${newSeal.color === c ? "selected" : ""}`}
+                style={{ background: c, boxShadow: newSeal.color === c ? `0 0 0 2px #0D0B0A, 0 0 0 4px ${c}` : "none" }}
+                onClick={() => setNewSeal(s => ({ ...s, color: c }))} />
+            ))}
+          </div>
+          <button className="gold-btn" style={{ width: "100%", marginTop: 8 }} onClick={createSeal}>Create Seal</button>
+        </div>
+      </Modal>
+
+      {/* Admin: Edit Seal Modal */}
+      <Modal open={!!editingSeal} onClose={() => setEditingSeal(null)} title="Edit Seal">
+        {editingSeal && (
+          <div style={{ padding: 16 }}>
+            <label className="input-label">Name</label>
+            <input className="text-input" value={editingSeal.name} onChange={e => setEditingSeal(s => ({ ...s, name: e.target.value }))} />
+            <label className="input-label">Subtitle</label>
+            <input className="text-input" value={editingSeal.subtitle} onChange={e => setEditingSeal(s => ({ ...s, subtitle: e.target.value }))} />
+            <label className="input-label">Description</label>
+            <textarea className="text-input" rows={2} value={editingSeal.description} onChange={e => setEditingSeal(s => ({ ...s, description: e.target.value }))} />
+            <label className="input-label">Icon</label>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+              {SEAL_ICONS.map(ic => (
+                <button key={ic} className={`admin-icon-btn ${editingSeal.icon === ic ? "selected" : ""}`}
+                  style={editingSeal.icon === ic ? { borderColor: editingSeal.color, background: `${editingSeal.color}22` } : {}}
+                  onClick={() => setEditingSeal(s => ({ ...s, icon: ic }))}>{ic}</button>
+              ))}
+            </div>
+            <label className="input-label">Color</label>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+              {SEAL_COLORS.map(c => (
+                <button key={c} className={`admin-color-btn ${editingSeal.color === c ? "selected" : ""}`}
+                  style={{ background: c, boxShadow: editingSeal.color === c ? `0 0 0 2px #0D0B0A, 0 0 0 4px ${c}` : "none" }}
+                  onClick={() => setEditingSeal(s => ({ ...s, color: c }))} />
+              ))}
+            </div>
+            <button className="gold-btn" style={{ width: "100%" }} onClick={saveSealEdit}>Save Changes</button>
+          </div>
+        )}
+      </Modal>
+
+      {/* Admin: Add Triumph Modal */}
+      <Modal open={!!showAddTriumph} onClose={() => setShowAddTriumph(null)} title="Add Triumph">
+        <div style={{ padding: 16 }}>
+          <label className="input-label">Triumph Name</label>
+          <input className="text-input" value={newTriumph.name} onChange={e => setNewTriumph(t => ({ ...t, name: e.target.value }))} placeholder="e.g. Read 3 books" />
+          <label className="input-label">Description</label>
+          <input className="text-input" value={newTriumph.desc} onChange={e => setNewTriumph(t => ({ ...t, desc: e.target.value }))} placeholder="What the user must do..." />
+          <label className="input-label">Target (completions needed)</label>
+          <input className="text-input" type="number" value={newTriumph.target} onChange={e => setNewTriumph(t => ({ ...t, target: e.target.value }))} />
+          <button className="gold-btn" style={{ width: "100%", marginTop: 12 }} onClick={() => addTriumph(showAddTriumph)}>Add Triumph</button>
+        </div>
+      </Modal>
+
+      {/* Admin: Edit Triumph Modal */}
+      <Modal open={!!editingTriumph} onClose={() => setEditingTriumph(null)} title="Edit Triumph">
+        {editingTriumph && (
+          <div style={{ padding: 16 }}>
+            <label className="input-label">Name</label>
+            <input className="text-input" value={editingTriumph.name} onChange={e => setEditingTriumph(t => ({ ...t, name: e.target.value }))} />
+            <label className="input-label">Description</label>
+            <input className="text-input" value={editingTriumph.desc} onChange={e => setEditingTriumph(t => ({ ...t, desc: e.target.value }))} />
+            <label className="input-label">Target</label>
+            <input className="text-input" type="number" value={editingTriumph.target} onChange={e => setEditingTriumph(t => ({ ...t, target: parseInt(e.target.value) || 1 }))} />
+            <button className="gold-btn" style={{ width: "100%" }} onClick={() => saveTriumphEdit(editingTriumph.sealId)}>Save Changes</button>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
@@ -1429,7 +1653,7 @@ function LibraryPage() {
 // PAGE: REVIEWS
 // ═══════════════════════════════════════════
 function ReviewsPage() {
-  const { data, setData, currentUser } = useContext(AppContext);
+  const { data, setData, currentUser, isAdmin } = useContext(AppContext);
   const [showWrite, setShowWrite] = useState(false);
   const [filterCat, setFilterCat] = useState("All");
   const [filterRating, setFilterRating] = useState(0);
@@ -1450,6 +1674,10 @@ function ReviewsPage() {
     setData(d => ({ ...d, reviews: [...d.reviews, review] }));
     setNewReview({ bookId: "", rating: 5, text: "" });
     setShowWrite(false);
+  }
+
+  function deleteReview(reviewId) {
+    setData(d => ({ ...d, reviews: d.reviews.filter(r => r.id !== reviewId) }));
   }
 
   return (
@@ -1493,6 +1721,13 @@ function ReviewsPage() {
                 <div style={{ marginLeft: "auto" }}><StarRating rating={review.rating} size={14} /></div>
               </div>
               <p className="review-text"><ScriptureText text={review.text} /></p>
+              {(isAdmin || review.memberId === currentUser.id) && (
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                  <button className="admin-delete-btn" onClick={() => deleteReview(review.id)}>
+                    <X size={12} /> Delete
+                  </button>
+                </div>
+              )}
             </Panel>
           );
         })}
@@ -1526,14 +1761,22 @@ function ReviewsPage() {
 // PAGE: FORUM
 // ═══════════════════════════════════════════
 function ForumPage() {
-  const { data, setData, currentUser } = useContext(AppContext);
+  const { data, setData, currentUser, isAdmin } = useContext(AppContext);
   const [selectedThread, setSelectedThread] = useState(null);
   const [filterCat, setFilterCat] = useState("All");
   const [showNewThread, setShowNewThread] = useState(false);
   const [newThread, setNewThread] = useState({ title: "", category: FORUM_CATEGORIES[0], text: "", bookId: "" });
   const [replyText, setReplyText] = useState("");
 
-  const threads = filterCat === "All" ? data.threads : data.threads.filter(t => t.category === filterCat);
+  const pinnedIds = data.pinnedThreads || [];
+  const threads = (filterCat === "All" ? data.threads : data.threads.filter(t => t.category === filterCat))
+    .sort((a, b) => {
+      const aPinned = pinnedIds.includes(a.id);
+      const bPinned = pinnedIds.includes(b.id);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      return b.date.localeCompare(a.date);
+    });
   const thread = data.threads.find(t => t.id === selectedThread);
 
   function createThread() {
@@ -1563,6 +1806,29 @@ function ForumPage() {
     setReplyText("");
   }
 
+  function deleteThread(threadId) {
+    setData(d => ({
+      ...d,
+      threads: d.threads.filter(t => t.id !== threadId),
+      pinnedThreads: (d.pinnedThreads || []).filter(id => id !== threadId),
+    }));
+    setSelectedThread(null);
+  }
+
+  function deletePost(threadId, postId) {
+    setData(d => ({
+      ...d,
+      threads: d.threads.map(t => t.id === threadId ? { ...t, posts: t.posts.filter(p => p.id !== postId) } : t),
+    }));
+  }
+
+  function togglePin(threadId) {
+    setData(d => {
+      const pins = d.pinnedThreads || [];
+      return { ...d, pinnedThreads: pins.includes(threadId) ? pins.filter(id => id !== threadId) : [...pins, threadId] };
+    });
+  }
+
   if (selectedThread && thread) {
     const linkedBook = thread.bookId ? data.books.find(b => b.id === thread.bookId) : null;
     return (
@@ -1572,7 +1838,10 @@ function ForumPage() {
         </button>
         <Panel style={{ marginTop: 12 }}>
           <div className="thread-header-detail">
-            <span className="forum-cat-badge">{thread.category}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span className="forum-cat-badge">{thread.category}</span>
+              {pinnedIds.includes(thread.id) && <span className="forum-cat-badge" style={{ background: "rgba(212,175,55,0.1)", color: "#D4AF37" }}>PINNED</span>}
+            </div>
             <h3 style={{ margin: "8px 0 4px", color: "#E8E0D0", fontSize: 20 }}>{thread.title}</h3>
             {linkedBook && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#8A7E6B", fontSize: 13, margin: "4px 0" }}>
@@ -1582,6 +1851,16 @@ function ForumPage() {
             <div style={{ color: "#6B6152", fontSize: 12 }}>
               Started by {MEMBERS.find(m => m.id === thread.authorId)?.name} · {thread.date}
             </div>
+            {isAdmin && (
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button className="admin-delete-btn" style={{ color: "#D4AF37", borderColor: "#D4AF3733" }} onClick={() => togglePin(thread.id)}>
+                  {pinnedIds.includes(thread.id) ? "Unpin" : "Pin Thread"}
+                </button>
+                <button className="admin-delete-btn" onClick={() => deleteThread(thread.id)}>
+                  <X size={12} /> Delete Thread
+                </button>
+              </div>
+            )}
           </div>
         </Panel>
 
@@ -1592,7 +1871,14 @@ function ForumPage() {
               <Panel key={post.id} className="post-card" style={{ marginTop: 12 }}>
                 <div className="post-header">
                   <Avatar member={author} size={32} />
-                  <span className="post-date">{post.date}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span className="post-date">{post.date}</span>
+                    {(isAdmin || post.authorId === currentUser.id) && i > 0 && (
+                      <button className="admin-delete-btn" onClick={() => deletePost(thread.id, post.id)}>
+                        <X size={10} />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="post-body">
                   <ScriptureText text={post.text} />
@@ -1642,8 +1928,18 @@ function ForumPage() {
           return (
             <Panel key={thread.id} className="thread-card" onClick={() => setSelectedThread(thread.id)}>
               <div className="thread-card-top">
-                <span className="forum-cat-badge">{thread.category}</span>
-                <span style={{ color: "#6B6152", fontSize: 12 }}>{thread.posts.length} {thread.posts.length === 1 ? "post" : "posts"}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {pinnedIds.includes(thread.id) && <span style={{ color: "#D4AF37", fontSize: 11, fontWeight: 700, fontFamily: "'Rajdhani', sans-serif", letterSpacing: 1 }}>PINNED</span>}
+                  <span className="forum-cat-badge">{thread.category}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ color: "#6B6152", fontSize: 12 }}>{thread.posts.length} {thread.posts.length === 1 ? "post" : "posts"}</span>
+                  {isAdmin && (
+                    <button className="admin-delete-btn" onClick={(e) => { e.stopPropagation(); deleteThread(thread.id); }} style={{ padding: "2px 6px" }}>
+                      <X size={10} />
+                    </button>
+                  )}
+                </div>
               </div>
               <h4 className="thread-title">{thread.title}</h4>
               <div className="thread-meta">
@@ -3315,6 +3611,46 @@ select.text-input { cursor: pointer; }
 .mobile-menu-signout { color: #6B6152; font-size: 13px; }
 .mobile-menu-signout:hover { color: var(--red); }
 
+/* ═══ ADMIN ═══ */
+.admin-sm-btn {
+  width: 22px; height: 22px; border-radius: 3px; border: 1px solid var(--border-subtle);
+  background: var(--bg-deep); color: var(--text-muted); font-size: 12px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+  font-family: 'Rajdhani', sans-serif;
+}
+.admin-sm-btn:hover { border-color: var(--gold); color: var(--gold); }
+.admin-add-btn {
+  display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 8px 14px;
+  background: none; border: 1px dashed var(--border-subtle); border-radius: 4px;
+  color: var(--text-muted); font-family: 'Rajdhani', sans-serif; font-size: 12px;
+  font-weight: 600; letter-spacing: 1px; cursor: pointer; transition: all 0.15s;
+}
+.admin-add-btn:hover { border-color: var(--gold); color: var(--gold); }
+.admin-delete-btn {
+  display: flex; align-items: center; gap: 4px; padding: 4px 10px; background: none;
+  border: 1px solid #C0392B33; border-radius: 3px; color: #C0392B; font-size: 11px;
+  font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: 0.5px;
+  cursor: pointer; transition: all 0.15s;
+}
+.admin-delete-btn:hover { background: rgba(192,57,43,0.08); border-color: #C0392B66; }
+.admin-icon-btn {
+  width: 36px; height: 36px; border-radius: 4px; border: 1px solid var(--border-subtle);
+  background: var(--bg-deep); color: var(--text-secondary); font-size: 18px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+}
+.admin-icon-btn:hover { border-color: var(--gold); }
+.admin-icon-btn.selected { border-width: 2px; }
+.admin-color-btn {
+  width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent;
+  cursor: pointer; transition: all 0.15s;
+}
+.admin-color-btn:hover { transform: scale(1.15); }
+.admin-badge {
+  font-family: 'Rajdhani', sans-serif; font-size: 9px; font-weight: 700;
+  letter-spacing: 1.5px; color: #C0392B; background: rgba(192,57,43,0.1);
+  border: 1px solid #C0392B33; padding: 1px 6px; border-radius: 3px;
+}
+
 /* ═══ RESPONSIVE ═══ */
 @media (max-width: 768px) {
   /* ═══ HAMBURGER MENU ═══ */
@@ -3496,19 +3832,19 @@ export default function App() {
   useEffect(() => {
     async function load() {
       try {
-        const stored = await window.storage.get("app-data-1711s-v9");
+        const stored = await window.storage.get("app-data-1711s-v10");
         if (stored) {
           setData(JSON.parse(stored.value));
         } else {
           const seed = getSeedData();
           setData(seed);
-          await window.storage.set("app-data-1711s-v9", JSON.stringify(seed));
+          await window.storage.set("app-data-1711s-v10", JSON.stringify(seed));
         }
       } catch {
         setData(getSeedData());
       }
       try {
-        const user = await window.storage.get("current-user-1711s-v9");
+        const user = await window.storage.get("current-user-1711s-v10");
         if (user) setCurrentUser(JSON.parse(user.value));
       } catch {}
       setLoading(false);
@@ -3518,18 +3854,18 @@ export default function App() {
 
   useEffect(() => {
     if (data) {
-      window.storage.set("app-data-1711s-v9", JSON.stringify(data)).catch(() => {});
+      window.storage.set("app-data-1711s-v10", JSON.stringify(data)).catch(() => {});
     }
   }, [data]);
 
   async function login(member) {
     setCurrentUser(member);
-    await window.storage.set("current-user-1711s-v9", JSON.stringify(member)).catch(() => {});
+    await window.storage.set("current-user-1711s-v10", JSON.stringify(member)).catch(() => {});
   }
 
   function logout() {
     setCurrentUser(null);
-    window.storage.delete("current-user-1711s-v9").catch(() => {});
+    window.storage.delete("current-user-1711s-v10").catch(() => {});
   }
 
   if (loading) {
@@ -3576,7 +3912,8 @@ export default function App() {
     { id: "members", label: "Fireteam", icon: <Users size={14} /> },
   ];
 
-  const ctx = { data, setData, currentUser, page, setPage, profileTarget, setProfileTarget };
+  const isAdmin = currentUser?.admin === true;
+  const ctx = { data, setData, currentUser, page, setPage, profileTarget, setProfileTarget, isAdmin };
 
   function navTo(id) {
     setPage(id);
