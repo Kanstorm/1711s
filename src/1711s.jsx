@@ -389,6 +389,38 @@ function Avatar({ member, size = 40, showTitle = true }) {
   );
 }
 
+async function fetchBookCover(title, author) {
+  try {
+    const q = encodeURIComponent(`${title} ${author}`);
+    const res = await fetch(`https://openlibrary.org/search.json?q=${q}&limit=3&fields=key,title,author_name,cover_i`);
+    const data = await res.json();
+    if (data.docs && data.docs.length > 0) {
+      const best = data.docs.find(d => d.cover_i) || data.docs[0];
+      if (best.cover_i) {
+        return `https://covers.openlibrary.org/b/id/${best.cover_i}-M.jpg`;
+      }
+    }
+  } catch (e) {
+    console.log("Cover fetch failed:", e);
+  }
+  return null;
+}
+
+function BookCover({ book, size = 36 }) {
+  if (book.coverUrl) {
+    return (
+      <img
+        src={book.coverUrl}
+        alt={book.title}
+        className="book-cover-img"
+        style={{ width: size * 0.85, height: size * 1.25, objectFit: "cover", borderRadius: 3, flexShrink: 0 }}
+        onError={e => { e.target.style.display = "none"; e.target.nextSibling.style.display = "inline"; }}
+      />
+    );
+  }
+  return <span style={{ fontSize: size, flexShrink: 0 }}>{book.cover || "📘"}</span>;
+}
+
 function DiamondDivider() {
   return (
     <div className="diamond-divider">
@@ -532,7 +564,7 @@ function HomePage() {
               return (
                 <Panel key={inv.id} className="invite-card" glow="#2B9EB3">
                   <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-                    <span style={{ fontSize: 32 }}>{book?.cover}</span>
+                    {book && <BookCover book={book} size={32} />}
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 700, color: "#E8E0D0", fontSize: 15 }}>{book?.title}</div>
                       <div style={{ color: "#6B6152", fontSize: 12 }}>{book?.author}</div>
@@ -656,7 +688,7 @@ function HomePage() {
               const member = MEMBERS.find(m => m.id === rec.memberId);
               return (
                 <Panel key={rec.id} className="rec-card">
-                  <div className="rec-book-cover">{book?.cover}</div>
+                  <div className="rec-book-cover">{book ? <BookCover book={book} size={36} /> : "📘"}</div>
                   <div>
                     <div style={{ fontWeight: 600, color: "#E8E0D0", fontSize: 14 }}>{book?.title}</div>
                     <div style={{ color: "#8A7E6B", fontSize: 12 }}>{book?.author}</div>
@@ -809,7 +841,8 @@ function LibraryPage() {
   const [filter, setFilter] = useState("All");
   const [showAddBook, setShowAddBook] = useState(false);
   const [selectedBook, setSelectedBook] = useState(null);
-  const [newBook, setNewBook] = useState({ title: "", author: "", category: CATEGORIES[0], pages: "" });
+  const [newBook, setNewBook] = useState({ title: "", author: "", category: CATEGORIES[0], pages: "", coverUrl: "" });
+  const [coverLoading, setCoverLoading] = useState(false);
   const [updatePage, setUpdatePage] = useState("");
   const [view, setView] = useState("grid");
   const [showFireteam, setShowFireteam] = useState(false);
@@ -828,10 +861,19 @@ function LibraryPage() {
 
   function addBook() {
     if (!newBook.title || !newBook.author || !newBook.pages) return;
-    const book = { ...newBook, id: `b${Date.now()}`, pages: parseInt(newBook.pages), cover: "📘" };
+    const book = { ...newBook, id: `b${Date.now()}`, pages: parseInt(newBook.pages), cover: "📘", coverUrl: newBook.coverUrl || "" };
     setData(d => ({ ...d, books: [...d.books, book] }));
-    setNewBook({ title: "", author: "", category: CATEGORIES[0], pages: "" });
+    setNewBook({ title: "", author: "", category: CATEGORIES[0], pages: "", coverUrl: "" });
+    setCoverLoading(false);
     setShowAddBook(false);
+  }
+
+  async function searchCover() {
+    if (!newBook.title) return;
+    setCoverLoading(true);
+    const url = await fetchBookCover(newBook.title, newBook.author);
+    setNewBook(n => ({ ...n, coverUrl: url || "" }));
+    setCoverLoading(false);
   }
 
   function updateProgress(bookId) {
@@ -933,7 +975,7 @@ function LibraryPage() {
         {/* Book Header */}
         <Panel className="gr-detail-header" glow="#2B9EB3" style={{ marginTop: 12 }}>
           <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-            <span style={{ fontSize: 40 }}>{grBook.cover}</span>
+            <span style={{ fontSize: 40 }}><BookCover book={grBook} size={40} /></span>
             <div style={{ flex: 1 }}>
               <div style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: 11, letterSpacing: 2, color: "#2B9EB3", textTransform: "uppercase", marginBottom: 4 }}>
                 GROUP READ
@@ -1063,7 +1105,7 @@ function LibraryPage() {
               return (
                 <Panel key={inv.id} className="group-read-card" glow="#2B9EB3">
                   <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
-                    <span style={{ fontSize: 32 }}>{book.cover}</span>
+                    <span style={{ fontSize: 32 }}><BookCover book={book} size={32} /></span>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 700, color: "#E8E0D0", fontSize: 15 }}>{book.title}</div>
                       <div style={{ color: "#6B6152", fontSize: 12 }}>{book.author} · {book.pages} pages</div>
@@ -1144,7 +1186,7 @@ function LibraryPage() {
           }).map(book => (
             <Panel key={book.id} style={{ marginBottom: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-                <span style={{ fontSize: 28 }}>{book.cover}</span>
+                <span style={{ fontSize: 28 }}><BookCover book={book} size={28} /></span>
                 <div>
                   <div style={{ fontWeight: 700, color: "#E8E0D0", fontSize: 15 }}>{book.title}</div>
                   <div style={{ color: "#6B6152", fontSize: 12 }}>{book.author} · {book.pages} pages</div>
@@ -1188,7 +1230,7 @@ function LibraryPage() {
                 glow={done ? "#27AE60" : hasGroupRead ? "#2B9EB3" : undefined}
               >
                 {hasGroupRead && <div className="group-read-badge">GROUP READ</div>}
-                <div className="book-cover-emoji">{book.cover}</div>
+                <div className="book-cover-emoji"><BookCover book={book} size={36} /></div>
                 <div className="book-info">
                   <div className="book-title">{book.title}</div>
                   <div className="book-author">{book.author}</div>
@@ -1216,7 +1258,7 @@ function LibraryPage() {
         {selectedBook && (
           <div style={{ padding: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-              <span style={{ fontSize: 36 }}>{selectedBook.cover}</span>
+              <span style={{ fontSize: 36 }}><BookCover book={selectedBook} size={36} /></span>
               <div>
                 <div style={{ fontWeight: 700, color: "#E8E0D0", fontSize: 16 }}>{selectedBook.title}</div>
                 <div style={{ color: "#6B6152", fontSize: 13 }}>{selectedBook.author} · {selectedBook.pages} pages</div>
@@ -1260,7 +1302,7 @@ function LibraryPage() {
         {selectedBook && (
           <div style={{ padding: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, padding: 12, background: "var(--bg-deep)", borderRadius: 6 }}>
-              <span style={{ fontSize: 28 }}>{selectedBook.cover}</span>
+              <span style={{ fontSize: 28 }}><BookCover book={selectedBook} size={28} /></span>
               <div>
                 <div style={{ fontWeight: 700, color: "#E8E0D0", fontSize: 15 }}>{selectedBook.title}</div>
                 <div style={{ color: "#6B6152", fontSize: 12 }}>{selectedBook.author}</div>
@@ -1315,9 +1357,47 @@ function LibraryPage() {
       <Modal open={showAddBook} onClose={() => setShowAddBook(false)} title="Add New Book">
         <div style={{ padding: 16 }}>
           <label className="input-label">Title</label>
-          <input className="text-input" value={newBook.title} onChange={e => setNewBook(n => ({ ...n, title: e.target.value }))} />
+          <input className="text-input" value={newBook.title} onChange={e => setNewBook(n => ({ ...n, title: e.target.value }))} placeholder="e.g. Knowing God" />
           <label className="input-label">Author</label>
-          <input className="text-input" value={newBook.author} onChange={e => setNewBook(n => ({ ...n, author: e.target.value }))} />
+          <input className="text-input" value={newBook.author} onChange={e => setNewBook(n => ({ ...n, author: e.target.value }))} placeholder="e.g. J.I. Packer" />
+
+          {/* Cover Search */}
+          <label className="input-label">Book Cover</label>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 12 }}>
+            <div className="cover-preview">
+              {newBook.coverUrl ? (
+                <img src={newBook.coverUrl} alt="Cover" style={{ width: 60, height: 90, objectFit: "cover", borderRadius: 4 }} />
+              ) : (
+                <div style={{ width: 60, height: 90, background: "var(--bg-deep)", border: "1px solid var(--border-subtle)", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", color: "#4A4235", fontSize: 28 }}>📘</div>
+              )}
+            </div>
+            <div style={{ flex: 1 }}>
+              <button
+                className="filter-btn"
+                style={{ width: "100%", justifyContent: "center", marginBottom: 6 }}
+                onClick={searchCover}
+                disabled={coverLoading || !newBook.title}
+              >
+                {coverLoading ? (
+                  <span style={{ animation: "pulse 1s infinite" }}>Searching...</span>
+                ) : (
+                  <><Search size={12} /> Find Cover</>
+                )}
+              </button>
+              <div style={{ color: "#4A4235", fontSize: 11 }}>
+                {newBook.coverUrl ? "✓ Cover found!" : "Enter title & author, then search"}
+              </div>
+              {newBook.coverUrl && (
+                <button
+                  style={{ background: "none", border: "none", color: "#6B6152", fontSize: 11, cursor: "pointer", marginTop: 2, textDecoration: "underline" }}
+                  onClick={() => setNewBook(n => ({ ...n, coverUrl: "" }))}
+                >
+                  Remove cover
+                </button>
+              )}
+            </div>
+          </div>
+
           <label className="input-label">Category</label>
           <select className="text-input" value={newBook.category} onChange={e => setNewBook(n => ({ ...n, category: e.target.value }))}>
             {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -1391,7 +1471,7 @@ function ReviewsPage() {
                 <span className="review-date">{review.date}</span>
               </div>
               <div className="review-book-info">
-                <span style={{ fontSize: 20, marginRight: 8 }}>{book?.cover}</span>
+                <span style={{ fontSize: 20, marginRight: 8 }}>{book ? <BookCover book={book} size={20} /> : "📘"}</span>
                 <div>
                   <div style={{ fontWeight: 600, color: "#E8E0D0" }}>{book?.title}</div>
                   <div style={{ color: "#6B6152", fontSize: 12 }}>{book?.author}</div>
@@ -2449,7 +2529,7 @@ function ProfilePage() {
           const done = book.progress >= book.pages;
           return (
             <Panel key={book.id} className="bookshelf-item">
-              <span style={{ fontSize: 24 }}>{book.cover}</span>
+              <span style={{ fontSize: 24 }}><BookCover book={book} size={24} /></span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, color: "#E8E0D0", fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{book.title}</div>
                 <ProgressBar value={book.progress} max={book.pages} color={done ? "#27AE60" : "#D4AF37"} height={3} />
@@ -2471,7 +2551,7 @@ function ProfilePage() {
             return (
               <Panel key={r.id} style={{ marginBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <span>{book?.cover}</span>
+                  <span>{book ? <BookCover book={book} size={20} /> : "📘"}</span>
                   <span style={{ fontWeight: 600, color: "#E8E0D0" }}>{book?.title}</span>
                   <div style={{ marginLeft: "auto" }}><StarRating rating={r.rating} size={12} /></div>
                 </div>
