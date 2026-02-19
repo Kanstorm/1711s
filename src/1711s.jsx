@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext } from "react";
-import { BookOpen, MessageSquare, Trophy, Users, Star, ChevronRight, ChevronDown, Send, Shield, Flame, Search, Plus, X, Check, Clock, TrendingUp, Award, Bookmark, Quote, ArrowLeft, Heart, Zap, Eye, Edit3, Hash, Menu } from "lucide-react";
+import { useState, useEffect, useRef, createContext, useContext } from "react";
+import { BookOpen, MessageSquare, Trophy, Users, Star, ChevronRight, ChevronDown, Send, Flame, Search, Plus, X, Check, Clock, TrendingUp, Award, Bookmark, ArrowLeft, Heart, Zap, Eye, Edit3, Hash, Menu } from "lucide-react";
 
 // Polyfill storage for browser (in-memory fallback if localStorage unavailable)
 if (!window.storage) {
@@ -28,11 +28,25 @@ if (!window.storage) {
 const AppContext = createContext(null);
 
 const MEMBERS = [
-  { id: "m1", name: "Boomer", avatar: "BO", joinDate: "2025-01-15", admin: true },
-  { id: "m2", name: "Keaton", avatar: "KE", joinDate: "2025-01-15" },
-  { id: "m3", name: "Ryan", avatar: "RY", joinDate: "2025-01-20" },
-  { id: "m4", name: "Tripp", avatar: "TR", joinDate: "2025-02-01" },
-  { id: "m5", name: "Evan", avatar: "EV", joinDate: "2025-02-01" },
+  { id: "m1", name: "Boomer", avatar: "BO", tag: "1711", joinDate: "2025-01-15", admin: true },
+  { id: "m2", name: "Keaton", avatar: "KE", tag: "3916", joinDate: "2025-01-15" },
+  { id: "m3", name: "Ryan", avatar: "RY", tag: "0842", joinDate: "2025-01-20" },
+  { id: "m4", name: "Tripp", avatar: "TR", tag: "5523", joinDate: "2025-02-01" },
+  { id: "m5", name: "Evan", avatar: "EV", tag: "7704", joinDate: "2025-02-01" },
+  { id: "m6", name: "Grace", avatar: "GR", tag: "2244", joinDate: "2025-02-19" },
+];
+
+// Discoverable users (not in your fireteam by default — findable via search)
+const ALL_USERS = [
+  ...MEMBERS,
+  { id: "u1", name: "Silas", avatar: "SI", tag: "4490", joinDate: "2025-03-01" },
+  { id: "u2", name: "Ezra", avatar: "EZ", tag: "1689", joinDate: "2025-03-05" },
+  { id: "u3", name: "Lydia", avatar: "LY", tag: "6631", joinDate: "2025-03-10" },
+  { id: "u4", name: "Caleb", avatar: "CA", tag: "8812", joinDate: "2025-04-01" },
+  { id: "u5", name: "Naomi", avatar: "NA", tag: "3317", joinDate: "2025-04-12" },
+  { id: "u6", name: "Micah", avatar: "MI", tag: "5509", joinDate: "2025-05-01" },
+  { id: "u7", name: "Ruth", avatar: "RU", tag: "2103", joinDate: "2025-05-15" },
+  { id: "u8", name: "Josiah", avatar: "JO", tag: "9271", joinDate: "2025-06-01" },
 ];
 
 const CATEGORIES = [
@@ -134,6 +148,25 @@ const DAILY_VERSES = [
 ];
 
 function getSeedData() {
+  // ── Data Schema ──
+  // books[]              - Library catalog
+  // readingProgress{}    - { userId: { bookId: pagesRead } }
+  // reviews[]            - Book reviews with ratings
+  // threads[]            - Forum threads with nested posts[]
+  // recommendations[]    - Book recs to the group
+  // activities[]         - Activity feed entries
+  // equippedTitles{}     - { userId: sealName }
+  // completedSeals{}     - { userId: [sealId, ...] }
+  // triumphProgress{}    - { userId: { triumphId: count } } — manual/custom triumphs only
+  // groupChallenges[]    - Admin-created group challenges
+  // readInvites[]        - Group read invitations
+  // bibleProgress{}      - { userId: { bookName: [chapters] } }
+  // prestigeLevel{}      - { userId: level }
+  // customSeals[]        - Admin-created seal definitions
+  // pinnedThreads[]      - Thread IDs pinned by admin
+  // displayNames{}       - { userId: customName }
+  // friendRequests[]     - { id, fromId, toId, date, status }
+  // friends{}            - { userId: [friendId, ...] }
   const readingProgress = {};
   MEMBERS.forEach(m => {
     readingProgress[m.id] = {};
@@ -149,12 +182,24 @@ function getSeedData() {
     equippedTitles: {},
     completedSeals: {},
     triumphProgress: {},
-    groupChallenge: { name: "Read 12 Theology Books in 2026", target: 12 },
+    groupChallenges: [
+      { id: "gc1", name: "Read 12 Theology Books", description: "Read 12 theology books as a fireteam", target: 12, type: "books", year: 2026, active: true },
+    ],
     readInvites: [],
     bibleProgress: {},
     prestigeLevel: {},
     customSeals: [],
     pinnedThreads: [],
+    displayNames: {},
+    friendRequests: [],
+    friends: {
+      m1: ["m2", "m3", "m4", "m5"],
+      m2: ["m1", "m3", "m4", "m5"],
+      m3: ["m1", "m2", "m4", "m5"],
+      m4: ["m1", "m2", "m3", "m5"],
+      m5: ["m1", "m2", "m3", "m4"],
+      m6: [],
+    },
   };
 }
 
@@ -533,6 +578,7 @@ function Avatar({ member, size = 40, showTitle = true }) {
   const { data } = useContext(AppContext);
   const seal = SEAL_DEFINITIONS.find(s => s.name === data.equippedTitles?.[member.id]);
   const prestige = data.prestigeLevel?.[member.id] || 0;
+  const name = data.displayNames?.[member.id] || member.name;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       <div className="avatar" style={{ width: size, height: size, fontSize: size * 0.35 }}>
@@ -540,7 +586,7 @@ function Avatar({ member, size = 40, showTitle = true }) {
       </div>
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <span style={{ fontWeight: 600, fontSize: size > 36 ? 15 : 13, color: "#E8E0D0" }}>{member.name}</span>
+          <span style={{ fontWeight: 600, fontSize: size > 36 ? 15 : 13, color: "#E8E0D0" }}>{name}</span>
           {member.admin && <span className="admin-badge">ADMIN</span>}
           {prestige > 0 && <PrestigeEmblem level={prestige} size={size > 36 ? 22 : 18} />}
           {showTitle && data.equippedTitles?.[member.id] && (
@@ -564,7 +610,7 @@ async function fetchBookCover(title, author) {
       }
     }
   } catch (e) {
-    console.log("Cover fetch failed:", e);
+    // silently fail
   }
   return null;
 }
@@ -621,23 +667,6 @@ function Panel({ children, className = "", style = {}, glow, onClick }) {
   );
 }
 
-function TabBar({ tabs, active, onChange }) {
-  return (
-    <div className="tab-bar">
-      {tabs.map(t => (
-        <button
-          key={t.id}
-          className={`tab-btn ${active === t.id ? "active" : ""}`}
-          onClick={() => onChange(t.id)}
-        >
-          {t.icon && <span style={{ marginRight: 6 }}>{t.icon}</span>}
-          {t.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function Modal({ open, onClose, title, children, wide }) {
   if (!open) return null;
   return (
@@ -653,6 +682,31 @@ function Modal({ open, onClose, title, children, wide }) {
   );
 }
 
+function ConfirmDialog({ open, onClose, onConfirm, title = "Are you sure?", message, confirmLabel = "Delete", confirmColor = "#C0392B", icon }) {
+  if (!open) return null;
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" style={{ maxWidth: 380 }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: "24px 20px", textAlign: "center" }}>
+          {icon && <div style={{ marginBottom: 12 }}>{icon}</div>}
+          <div style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: 18, letterSpacing: 1.5, color: "#E8E0D0", marginBottom: 8 }}>{title}</div>
+          {message && <p style={{ color: "#A09880", fontSize: 13, margin: "0 0 20px", lineHeight: 1.5 }}>{message}</p>}
+          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+            <button
+              className="decline-btn"
+              style={{ padding: "10px 20px", gap: 6, color: confirmColor, borderColor: confirmColor + "44" }}
+              onClick={() => { onConfirm(); onClose(); }}
+            >
+              {confirmLabel}
+            </button>
+            <button className="gold-btn" onClick={onClose} style={{ opacity: 0.7 }}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ════════════════════════════════════════
 // PRESTIGE ANIMATION (Full-screen cinematic)
 // ════════════════════════════════════════
@@ -660,7 +714,6 @@ function PrestigeAnimation({ oldLevel, newLevel, onComplete }) {
   const canvasRef = useRef(null);
   const [phase, setPhase] = useState(0);
   const [textOpacity, setTextOpacity] = useState(0);
-  const [showNewStar, setShowNewStar] = useState(false);
   const [showText, setShowText] = useState(false);
   const [screenFlash, setScreenFlash] = useState(0);
   const animRef = useRef(null);
@@ -1038,7 +1091,6 @@ function PrestigeAnimation({ oldLevel, newLevel, onComplete }) {
         if (currentPhase < 2) {
           currentPhase = 2;
           setPhase(2);
-          setShowNewStar(true);
         }
         const t = (elapsed - phase1End) / 3;
 
@@ -1238,8 +1290,11 @@ function PrestigeAnimation({ oldLevel, newLevel, onComplete }) {
 // PAGE: HOME / DASHBOARD
 // ════════════════════════════════════════
 function HomePage() {
-  const { data, setData, currentUser, setPage } = useContext(AppContext);
+  const { data, setData, currentUser, setPage, isAdmin, showToast } = useContext(AppContext);
   const todayVerse = DAILY_VERSES[new Date().getDay() % DAILY_VERSES.length];
+  const [showChallengeModal, setShowChallengeModal] = useState(false);
+  const [editingChallenge, setEditingChallenge] = useState(null);
+  const [confirmDeleteChallenge, setConfirmDeleteChallenge] = useState(null);
 
   const memberBooks = Object.keys(data.readingProgress?.[currentUser.id] || {});
   const completedBooks = memberBooks.filter(bId => {
@@ -1257,6 +1312,56 @@ function HomePage() {
     });
     return acc;
   }, 0);
+
+  const groupReviewsCount = data.reviews.length;
+  const groupPagesCount = MEMBERS.reduce((acc, m) => {
+    return acc + Object.values(data.readingProgress?.[m.id] || {}).reduce((s, v) => s + v, 0);
+  }, 0);
+
+  function getChallengeProgress(challenge) {
+    if (challenge.type === "books") return groupCompleted;
+    if (challenge.type === "reviews") return groupReviewsCount;
+    if (challenge.type === "pages") return groupPagesCount;
+    return 0;
+  }
+
+  const activeChallenges = (data.groupChallenges || []).filter(c => c.active);
+
+  function openCreateChallenge() {
+    setEditingChallenge({ id: null, name: "", description: "", target: 12, type: "books", year: 2026, active: true });
+    setShowChallengeModal(true);
+  }
+
+  function openEditChallenge(challenge) {
+    setEditingChallenge({ ...challenge });
+    setShowChallengeModal(true);
+  }
+
+  function saveChallenge() {
+    if (!editingChallenge || !editingChallenge.name.trim()) return;
+    const isNew = !editingChallenge.id;
+    setData(d => {
+      const challenges = [...(d.groupChallenges || [])];
+      if (editingChallenge.id) {
+        const idx = challenges.findIndex(c => c.id === editingChallenge.id);
+        if (idx >= 0) challenges[idx] = editingChallenge;
+      } else {
+        challenges.push({ ...editingChallenge, id: `gc${Date.now()}` });
+      }
+      return { ...d, groupChallenges: challenges };
+    });
+    setShowChallengeModal(false);
+    setEditingChallenge(null);
+    showToast(isNew ? "Challenge created" : "Challenge updated");
+  }
+
+  function deleteChallenge(challengeId) {
+    setData(d => ({
+      ...d,
+      groupChallenges: (d.groupChallenges || []).filter(c => c.id !== challengeId),
+    }));
+    showToast("Challenge deleted", "info");
+  }
 
   const pendingInvites = (data.readInvites || []).filter(inv =>
     inv.status === "active" &&
@@ -1279,6 +1384,7 @@ function HomePage() {
         date: new Date().toISOString().split("T")[0], icon: "»",
       }],
     }));
+    showToast("Joined group read!");
   }
 
   function declineInvite(inviteId) {
@@ -1290,6 +1396,7 @@ function HomePage() {
           : inv
       ),
     }));
+    showToast("Invite declined", "info");
   }
 
   return (
@@ -1377,35 +1484,73 @@ function HomePage() {
           <div className="stat-label">Seals Earned</div>
         </Panel>
 
-        {/* Group Challenge */}
-        <Panel className="challenge-card" glow="#D4AF37">
-          <div className="challenge-header">
-            <Award size={20} style={{ color: "#D4AF37" }} />
-            <span className="section-title">2026 GROUP CHALLENGE</span>
-          </div>
-          <p style={{ color: "#A09880", fontSize: 13, margin: "6px 0 12px" }}>Read 12 theology books as a fireteam</p>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <div className="challenge-ring">
-              <svg viewBox="0 0 80 80" width={80} height={80}>
-                <circle cx="40" cy="40" r="34" fill="none" stroke="#2A2520" strokeWidth="6" />
-                <circle
-                  cx="40" cy="40" r="34" fill="none" stroke="#D4AF37"
-                  strokeWidth="6" strokeLinecap="round"
-                  strokeDasharray={`${(groupCompleted / 12) * 213.6} 213.6`}
-                  transform="rotate(-90 40 40)"
-                  style={{ filter: "drop-shadow(0 0 4px #D4AF3766)" }}
-                />
-                <text x="40" y="38" textAnchor="middle" fill="#D4AF37" fontSize="18" fontWeight="700">{groupCompleted}</text>
-                <text x="40" y="50" textAnchor="middle" fill="#8A7E6B" fontSize="10">/12</text>
-              </svg>
+        {/* Group Challenges */}
+        {activeChallenges.length > 0 ? activeChallenges.map(challenge => {
+          const progress = getChallengeProgress(challenge);
+          const pct = Math.min(1, progress / challenge.target);
+          const remaining = Math.max(0, challenge.target - progress);
+          const typeLabel = challenge.type === "books" ? "books" : challenge.type === "reviews" ? "reviews" : "pages";
+          return (
+            <Panel key={challenge.id} className="challenge-card" glow={pct >= 1 ? "#27AE60" : "#D4AF37"}>
+              <div className="challenge-header">
+                <Award size={20} style={{ color: pct >= 1 ? "#27AE60" : "#D4AF37" }} />
+                <span className="section-title">{challenge.year} GROUP CHALLENGE</span>
+                {isAdmin && (
+                  <button className="icon-btn" onClick={() => openEditChallenge(challenge)} style={{ marginLeft: "auto", color: "#6B6152" }}>
+                    <Edit3 size={13} />
+                  </button>
+                )}
+              </div>
+              <p style={{ color: "#A09880", fontSize: 13, margin: "6px 0 12px" }}>{challenge.description || challenge.name}</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <div className="challenge-ring">
+                  <svg viewBox="0 0 80 80" width={80} height={80}>
+                    <circle cx="40" cy="40" r="34" fill="none" stroke="#2A2520" strokeWidth="6" />
+                    <circle
+                      cx="40" cy="40" r="34" fill="none" stroke={pct >= 1 ? "#27AE60" : "#D4AF37"}
+                      strokeWidth="6" strokeLinecap="round"
+                      strokeDasharray={`${pct * 213.6} 213.6`}
+                      transform="rotate(-90 40 40)"
+                      style={{ filter: `drop-shadow(0 0 4px ${pct >= 1 ? "#27AE6066" : "#D4AF3766"})` }}
+                    />
+                    <text x="40" y="38" textAnchor="middle" fill={pct >= 1 ? "#27AE60" : "#D4AF37"} fontSize="18" fontWeight="700">{progress}</text>
+                    <text x="40" y="50" textAnchor="middle" fill="#8A7E6B" fontSize="10">/{challenge.target}</text>
+                  </svg>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: "#C8BFA8", fontSize: 13, marginBottom: 4 }}>
+                    {pct >= 1 ? "Challenge Complete!" : "Fireteam Progress"}
+                  </div>
+                  <ProgressBar value={progress} max={challenge.target} color={pct >= 1 ? "#27AE60" : "#D4AF37"} />
+                  <div style={{ color: "#6B6152", fontSize: 11, marginTop: 4 }}>
+                    {pct >= 1 ? `Goal reached — ${progress} ${typeLabel}!` : `${remaining} ${typeLabel} remaining`}
+                  </div>
+                </div>
+              </div>
+            </Panel>
+          );
+        }) : (
+          <Panel className="challenge-card">
+            <div style={{ textAlign: "center", padding: "20px 16px" }}>
+              <Award size={28} style={{ color: "#2A2520", marginBottom: 8 }} />
+              <div style={{ color: "#4A4235", fontSize: 13 }}>No active group challenges</div>
+              {isAdmin && (
+                <button className="gold-btn" style={{ marginTop: 12 }} onClick={openCreateChallenge}>
+                  <Plus size={14} /> Create Challenge
+                </button>
+              )}
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ color: "#C8BFA8", fontSize: 13, marginBottom: 4 }}>Fireteam Progress</div>
-              <ProgressBar value={groupCompleted} max={12} />
-              <div style={{ color: "#6B6152", fontSize: 11, marginTop: 4 }}>{12 - groupCompleted} books remaining</div>
-            </div>
+          </Panel>
+        )}
+
+        {/* Admin: Add another challenge */}
+        {isAdmin && activeChallenges.length > 0 && (
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <button className="gold-btn" style={{ fontSize: 11, padding: "6px 14px", opacity: 0.7 }} onClick={openCreateChallenge}>
+              <Plus size={12} /> Add Challenge
+            </button>
           </div>
-        </Panel>
+        )}
 
         {/* Activity Feed */}
         <Panel className="activity-card">
@@ -1414,13 +1559,20 @@ function HomePage() {
             <span className="section-title">FIRETEAM ACTIVITY</span>
           </div>
           <div className="activity-list">
-            {[...data.activities].reverse().slice(0, 8).map(a => {
+            {data.activities.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "24px 0" }}>
+                <Clock size={28} style={{ color: "#2A2520", marginBottom: 8 }} />
+                <div style={{ color: "#4A4235", fontSize: 13 }}>No activity yet</div>
+                <div style={{ color: "#33302A", fontSize: 12, marginTop: 4 }}>Start reading, writing reviews, or posting in the forum</div>
+              </div>
+            ) : [...data.activities].reverse().slice(0, 8).map(a => {
               const member = MEMBERS.find(m => m.id === a.memberId);
+              const mName = member ? (data.displayNames?.[member.id] || member.name) : "Unknown";
               return (
                 <div key={a.id} className="activity-item">
                   <span className="activity-icon">{a.icon}</span>
                   <div className="activity-text">
-                    <span style={{ color: "#D4AF37", fontWeight: 600 }}>{member?.name}</span>{" "}
+                    <span style={{ color: "#D4AF37", fontWeight: 600 }}>{mName}</span>{" "}
                     <span style={{ color: "#A09880" }}>{a.text}</span>
                   </div>
                   <span className="activity-date">{a.date}</span>
@@ -1457,6 +1609,82 @@ function HomePage() {
           </div>
         </>
       )}
+
+      {/* Challenge Create/Edit Modal */}
+      <Modal open={showChallengeModal} onClose={() => { setShowChallengeModal(false); setEditingChallenge(null); }} title={editingChallenge?.id ? "Edit Challenge" : "Create Challenge"}>
+        {editingChallenge && (
+          <div style={{ padding: 16 }}>
+            <label className="input-label">Challenge Name</label>
+            <input className="text-input" value={editingChallenge.name} onChange={e => setEditingChallenge(c => ({ ...c, name: e.target.value }))} placeholder="e.g. Read 12 Theology Books" />
+
+            <label className="input-label">Description</label>
+            <input className="text-input" value={editingChallenge.description} onChange={e => setEditingChallenge(c => ({ ...c, description: e.target.value }))} placeholder="Short description shown on the card" />
+
+            <div style={{ display: "flex", gap: 12, marginTop: 0 }}>
+              <div style={{ flex: 1 }}>
+                <label className="input-label">Type</label>
+                <select className="text-input" value={editingChallenge.type} onChange={e => setEditingChallenge(c => ({ ...c, type: e.target.value }))}>
+                  <option value="books">Books Completed</option>
+                  <option value="reviews">Reviews Written</option>
+                  <option value="pages">Pages Read</option>
+                </select>
+              </div>
+              <div style={{ flex: 1 }}>
+                <label className="input-label">Target</label>
+                <input className="text-input" type="number" min="1" value={editingChallenge.target} onChange={e => setEditingChallenge(c => ({ ...c, target: parseInt(e.target.value) || 1 }))} />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <label className="input-label">Year</label>
+                <input className="text-input" type="number" value={editingChallenge.year} onChange={e => setEditingChallenge(c => ({ ...c, year: parseInt(e.target.value) || 2026 }))} />
+              </div>
+              <div style={{ flex: 1, display: "flex", alignItems: "flex-end", paddingBottom: 2 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", color: "#A09880", fontSize: 13 }}>
+                  <input type="checkbox" checked={editingChallenge.active} onChange={e => setEditingChallenge(c => ({ ...c, active: e.target.checked }))} style={{ accentColor: "#D4AF37" }} />
+                  Active
+                </label>
+              </div>
+            </div>
+
+            {/* Preview */}
+            <div style={{ marginTop: 16, padding: 12, background: "var(--bg-deep)", borderRadius: 6, border: "1px solid var(--border-subtle)" }}>
+              <div style={{ color: "#4A4235", fontSize: 10, letterSpacing: 1.5, fontFamily: "'Rajdhani', sans-serif", fontWeight: 600, marginBottom: 6 }}>PREVIEW</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Award size={16} style={{ color: "#D4AF37" }} />
+                <span style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: 1.5, color: "#D4AF37" }}>
+                  {editingChallenge.year} GROUP CHALLENGE
+                </span>
+              </div>
+              <div style={{ color: "#A09880", fontSize: 12, marginTop: 4 }}>
+                {editingChallenge.description || editingChallenge.name || "..."} — Target: {editingChallenge.target} {editingChallenge.type}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+              <button className="gold-btn" style={{ flex: 1 }} onClick={saveChallenge}>
+                <Check size={14} /> {editingChallenge.id ? "Save Changes" : "Create Challenge"}
+              </button>
+              {editingChallenge.id && (
+                <button className="decline-btn" style={{ padding: "10px 16px", gap: 6, color: "#C0392B", borderColor: "#C0392B44" }}
+                  onClick={() => { setShowChallengeModal(false); setConfirmDeleteChallenge(editingChallenge.id); }}>
+                  <X size={14} /> Delete
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        open={!!confirmDeleteChallenge}
+        onClose={() => setConfirmDeleteChallenge(null)}
+        onConfirm={() => deleteChallenge(confirmDeleteChallenge)}
+        title="Delete Challenge?"
+        message="This group challenge will be permanently removed for everyone."
+        confirmLabel="Delete Challenge"
+      />
     </div>
   );
 }
@@ -1465,28 +1693,108 @@ function HomePage() {
 // PAGE: TRIUMPHS / SEALS
 // ════════════════════════════════════════
 function TriumphsPage() {
-  const { data, setData, currentUser, isAdmin } = useContext(AppContext);
+  const { data, setData, currentUser, isAdmin, showToast } = useContext(AppContext);
   const [selectedSeal, setSelectedSeal] = useState(null);
-  const myProgress = data.triumphProgress?.[currentUser.id] || {};
   const myCompletedSeals = data.completedSeals?.[currentUser.id] || [];
 
   // Admin state
   const [showCreateSeal, setShowCreateSeal] = useState(false);
   const [newSeal, setNewSeal] = useState({ name: "", subtitle: "", description: "", icon: "✦", color: "#D4AF37" });
   const [editingSeal, setEditingSeal] = useState(null);
-  const [showAddTriumph, setShowAddTriumph] = useState(null); // sealId
-  const [newTriumph, setNewTriumph] = useState({ name: "", desc: "", target: 1 });
+  const [showAddTriumph, setShowAddTriumph] = useState(null);
+  const [newTriumph, setNewTriumph] = useState({ name: "", desc: "", target: 1, type: "custom" });
   const [editingTriumph, setEditingTriumph] = useState(null);
+  const [confirmDeleteSeal, setConfirmDeleteSeal] = useState(null);
+  const [confirmDeleteTriumph, setConfirmDeleteTriumph] = useState(null);
 
   const allSeals = [...SEAL_DEFINITIONS, ...(data.customSeals || [])];
+
+  // ── Auto-compute triumph progress from actual app data ──
+  function computeProgress(triumph) {
+    const uid = currentUser.id;
+    const prg = data.readingProgress?.[uid] || {};
+    const completedBooks = data.books.filter(b => prg[b.id] && prg[b.id] >= b.pages);
+    const myReviews = data.reviews.filter(r => r.memberId === uid);
+    const myThreads = data.threads.filter(t => t.authorId === uid);
+    const myReplies = data.threads.reduce((acc, t) => acc + t.posts.filter(p => p.authorId === uid && p.id !== t.posts[0]?.id).length, 0);
+    const myRecs = (data.recommendations || []).filter(r => r.memberId === uid);
+    const biblePrg = data.bibleProgress?.[uid] || {};
+    const bibleCompleted = Object.values(biblePrg).filter(v => v === true || v >= 1).length;
+
+    switch (triumph.type) {
+      // ── BEREAN SEAL ──
+      case "books_read": return completedBooks.length;
+      case "reviews_written": return myReviews.length;
+      case "threads_started": return myThreads.length;
+      case "bible_read": return bibleCompleted;
+
+      // ── REFORMER SEAL ──
+      case "reformed_books": return completedBooks.filter(b => b.category === "Systematic Theology").length;
+      case "reformed_reviews": return myReviews.filter(r => {
+        const book = data.books.find(b => b.id === r.bookId);
+        return book?.category === "Systematic Theology";
+      }).length;
+      case "soteriology_posts": return data.threads
+        .filter(t => t.category === "Soteriology")
+        .reduce((acc, t) => acc + t.posts.filter(p => p.authorId === uid).length, 0);
+
+      // ── APOLOGIST SEAL ──
+      case "apologetics_books": return completedBooks.filter(b => b.category === "Apologetics").length;
+      case "hard_question": return myThreads.filter(t =>
+        ["Theology Proper", "Soteriology", "Eschatology", "Hermeneutics"].includes(t.category)
+      ).length;
+      case "long_review": return myReviews.filter(r => r.text.length >= 500).length;
+
+      // ── CONFESSOR SEAL ──
+      case "lbcf_read": return completedBooks.some(b => b.title.includes("1689")) ? 1 : 0;
+      case "lbcf_discussions": return data.threads
+        .filter(t => t.category === "Confessional Studies")
+        .reduce((acc, t) => acc + t.posts.filter(p => p.authorId === uid).length, 0);
+      case "quiz_complete": return data.triumphProgress?.[uid]?.["t13"] || 0;
+
+      // ── THEOLOGIAN SEAL ──
+      case "seals_complete": return myCompletedSeals.length;
+
+      // ── SHEPHERD SEAL ──
+      case "threads_10": return myThreads.length;
+      case "replies_20": return myReplies;
+      case "recommendations": return myRecs.length;
+
+      // ── CUSTOM (manual tracking) ──
+      case "custom":
+      default:
+        return data.triumphProgress?.[uid]?.[triumph.id] || 0;
+    }
+  }
 
   function getSealProgress(seal) {
     let completed = 0;
     seal.triumphs.forEach(t => {
-      if ((myProgress[t.id] || 0) >= t.target) completed++;
+      if (computeProgress(t) >= t.target) completed++;
     });
-    return { completed, total: seal.triumphs.length, isComplete: completed === seal.triumphs.length };
+    return { completed, total: seal.triumphs.length, isComplete: completed === seal.triumphs.length && seal.triumphs.length > 0 };
   }
+
+  // Auto-award completed seals
+  React.useEffect(() => {
+    const currentCompleted = data.completedSeals?.[currentUser.id] || [];
+    const newlyCompleted = [];
+    allSeals.forEach(seal => {
+      if (currentCompleted.includes(seal.id)) return;
+      if (seal.triumphs.length === 0) return;
+      const allDone = seal.triumphs.every(t => computeProgress(t) >= t.target);
+      if (allDone) newlyCompleted.push(seal.id);
+    });
+    if (newlyCompleted.length > 0) {
+      setData(d => ({
+        ...d,
+        completedSeals: {
+          ...(d.completedSeals || {}),
+          [currentUser.id]: [...(d.completedSeals?.[currentUser.id] || []), ...newlyCompleted],
+        },
+      }));
+    }
+  }, [data.readingProgress, data.reviews, data.threads, data.recommendations, data.bibleProgress]);
 
   // Admin: Create new seal
   function createSeal() {
@@ -1497,9 +1805,9 @@ function TriumphsPage() {
     setData(d => ({ ...d, customSeals: [...(d.customSeals || []), seal] }));
     setNewSeal({ name: "", subtitle: "", description: "", icon: "✦", color: "#D4AF37" });
     setShowCreateSeal(false);
+    showToast(`Seal "${seal.name}" created`);
   }
 
-  // Admin: Update seal details
   function saveSealEdit() {
     if (!editingSeal) return;
     setData(d => ({
@@ -1507,29 +1815,29 @@ function TriumphsPage() {
       customSeals: (d.customSeals || []).map(s => s.id === editingSeal.id ? editingSeal : s),
     }));
     setEditingSeal(null);
+    showToast("Seal updated");
   }
 
-  // Admin: Delete custom seal
   function deleteSeal(sealId) {
     setData(d => ({ ...d, customSeals: (d.customSeals || []).filter(s => s.id !== sealId) }));
     setSelectedSeal(null);
+    showToast("Seal deleted", "info");
   }
 
-  // Admin: Add triumph to a seal
   function addTriumph(sealId) {
     if (!newTriumph.name) return;
-    const triumph = { id: `t${Date.now()}`, name: newTriumph.name, desc: newTriumph.desc, type: "custom", target: parseInt(newTriumph.target) || 1 };
+    const triumph = { id: `t${Date.now()}`, name: newTriumph.name, desc: newTriumph.desc, type: newTriumph.type || "custom", target: parseInt(newTriumph.target) || 1 };
     setData(d => ({
       ...d,
       customSeals: (d.customSeals || []).map(s =>
         s.id === sealId ? { ...s, triumphs: [...s.triumphs, triumph] } : s
       ),
     }));
-    setNewTriumph({ name: "", desc: "", target: 1 });
+    setNewTriumph({ name: "", desc: "", target: 1, type: "custom" });
     setShowAddTriumph(null);
+    showToast("Triumph added");
   }
 
-  // Admin: Delete triumph from custom seal
   function deleteTriumph(sealId, triumphId) {
     setData(d => ({
       ...d,
@@ -1537,9 +1845,9 @@ function TriumphsPage() {
         s.id === sealId ? { ...s, triumphs: s.triumphs.filter(t => t.id !== triumphId) } : s
       ),
     }));
+    showToast("Triumph deleted", "info");
   }
 
-  // Admin: Edit triumph
   function saveTriumphEdit(sealId) {
     if (!editingTriumph) return;
     setData(d => ({
@@ -1549,6 +1857,7 @@ function TriumphsPage() {
       ),
     }));
     setEditingTriumph(null);
+    showToast("Triumph updated");
   }
 
   // Admin: manually adjust triumph progress for any user
@@ -1577,7 +1886,7 @@ function TriumphsPage() {
         )}
       </div>
       <p style={{ color: "#8A7E6B", margin: "-8px 0 20px", fontSize: 14 }}>
-        Complete all triumphs within a seal to earn the title
+        Triumphs auto-track from your reading, reviews, forum posts, and Bible progress
         {isAdmin && <span style={{ color: "#C0392B", fontSize: 11, marginLeft: 8 }}>ADMIN</span>}
       </p>
 
@@ -1635,21 +1944,27 @@ function TriumphsPage() {
                 <div className="seal-triumphs" onClick={e => e.stopPropagation()}>
                   <DiamondDivider />
                   {seal.triumphs.map(t => {
-                    const progress = myProgress[t.id] || 0;
+                    const progress = computeProgress(t);
                     const done = progress >= t.target;
+                    const isAutoTracked = t.type !== "custom";
                     return (
                       <div key={t.id} className={`triumph-row ${done ? "triumph-done" : ""}`}>
                         <div className={`triumph-check ${done ? "checked" : ""}`} style={done ? { borderColor: seal.color, background: seal.color } : {}}>
                           {done && <Check size={12} />}
                         </div>
                         <div style={{ flex: 1 }}>
-                          <div style={{ color: done ? seal.color : "#C8BFA8", fontWeight: 600, fontSize: 14 }}>{t.name}</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ color: done ? seal.color : "#C8BFA8", fontWeight: 600, fontSize: 14 }}>{t.name}</span>
+                            {isAutoTracked && (
+                              <span style={{ fontSize: 8, color: "#27AE60", border: "1px solid #27AE6033", padding: "1px 5px", borderRadius: 3, fontFamily: "'Rajdhani', sans-serif", letterSpacing: 0.8, fontWeight: 600 }}>AUTO</span>
+                            )}
+                          </div>
                           <div style={{ color: "#6B6152", fontSize: 12 }}>{t.desc}</div>
                         </div>
                         <span style={{ color: done ? seal.color : "#6B6152", fontSize: 13, fontWeight: 600 }}>
                           {Math.min(progress, t.target)}/{t.target}
                         </span>
-                        {isAdmin && (
+                        {isAdmin && !isAutoTracked && (
                           <div style={{ display: "flex", gap: 2, marginLeft: 8 }}>
                             <button className="admin-sm-btn" onClick={() => adjustProgress(t.id, currentUser.id, 1)}>+</button>
                             <button className="admin-sm-btn" onClick={() => adjustProgress(t.id, currentUser.id, -1)}>-</button>
@@ -1658,11 +1973,21 @@ function TriumphsPage() {
                                 <button className="admin-sm-btn" onClick={() => setEditingTriumph({ ...t, sealId: seal.id })} style={{ color: "#2B9EB3" }}>
                                   <Edit3 size={10} />
                                 </button>
-                                <button className="admin-sm-btn" onClick={() => deleteTriumph(seal.id, t.id)} style={{ color: "#C0392B" }}>
+                                <button className="admin-sm-btn" onClick={() => setConfirmDeleteTriumph({ sealId: seal.id, triumphId: t.id })} style={{ color: "#C0392B" }}>
                                   <X size={10} />
                                 </button>
                               </>
                             )}
+                          </div>
+                        )}
+                        {isAdmin && isAutoTracked && isCustom && (
+                          <div style={{ display: "flex", gap: 2, marginLeft: 8 }}>
+                            <button className="admin-sm-btn" onClick={() => setEditingTriumph({ ...t, sealId: seal.id })} style={{ color: "#2B9EB3" }}>
+                              <Edit3 size={10} />
+                            </button>
+                            <button className="admin-sm-btn" onClick={() => setConfirmDeleteTriumph({ sealId: seal.id, triumphId: t.id })} style={{ color: "#C0392B" }}>
+                              <X size={10} />
+                            </button>
                           </div>
                         )}
                       </div>
@@ -1678,14 +2003,14 @@ function TriumphsPage() {
                       <button className="admin-add-btn" style={{ color: "#2B9EB3", borderColor: "#2B9EB322" }} onClick={(e) => { e.stopPropagation(); setEditingSeal({ ...seal }); }}>
                         <Edit3 size={12} /> Edit Seal
                       </button>
-                      <button className="admin-add-btn" style={{ color: "#C0392B", borderColor: "#C0392B22" }} onClick={(e) => { e.stopPropagation(); deleteSeal(seal.id); }}>
+                      <button className="admin-add-btn" style={{ color: "#C0392B", borderColor: "#C0392B22" }} onClick={(e) => { e.stopPropagation(); setConfirmDeleteSeal(seal.id); }}>
                         <X size={12} /> Delete Seal
                       </button>
                     </div>
                   )}
                   {isAdmin && !isCustom && (
-                    <div style={{ marginTop: 10, padding: "6px 10px", background: "rgba(107,97,82,0.08)", borderRadius: 4, fontSize: 11, color: "#6B6152" }}>
-                      Built-in seal — use +/- to adjust progress. Create custom seals for full editing.
+                    <div style={{ marginTop: 10, padding: "6px 10px", background: "rgba(39,174,96,0.06)", borderRadius: 4, fontSize: 11, color: "#27AE60", border: "1px solid #27AE6022" }}>
+                      Built-in triumphs are auto-tracked from your reading, reviews, forum activity, and Bible progress.
                     </div>
                   )}
                 </div>
@@ -1695,28 +2020,71 @@ function TriumphsPage() {
         })}
       </div>
 
-      {/* Leaderboard */}
+      {/* Fireteam Titles */}
       <div style={{ marginTop: 32 }}>
         <div className="section-title" style={{ marginBottom: 12 }}>FIRETEAM TITLES</div>
-        <Panel>
-          <div className="leaderboard">
-            {MEMBERS.map(m => {
-              const mSeals = data.completedSeals?.[m.id] || [];
-              const mTitles = mSeals.map(sId => allSeals.find(s => s.id === sId)).filter(Boolean);
-              return (
-                <div key={m.id} className="leaderboard-row">
-                  <Avatar member={m} size={32} />
-                  <div style={{ display: "flex", gap: 8, marginLeft: "auto", flexWrap: "wrap" }}>
-                    {mTitles.map(s => (
-                      <span key={s.id} className="mini-seal" style={{ borderColor: s.color, color: s.color }}>{s.icon} {s.name}</span>
-                    ))}
-                    {mTitles.length === 0 && <span style={{ color: "#4A4235", fontSize: 12, fontStyle: "italic" }}>No titles yet</span>}
-                  </div>
+        <div className="members-grid">
+          {(() => {
+            const myFriends = data.friends?.[currentUser.id] || [];
+            const fireteam = ALL_USERS.filter(m => myFriends.includes(m.id));
+            if (fireteam.length === 0) return (
+              <Panel>
+                <div style={{ textAlign: "center", padding: "32px 20px" }}>
+                  <Users size={28} style={{ color: "#2A2520", marginBottom: 8 }} />
+                  <div style={{ color: "#4A4235", fontSize: 13 }}>Add friends to your fireteam to see their titles here</div>
                 </div>
+              </Panel>
+            );
+            return fireteam.map(m => {
+              const mSeals = (data.completedSeals?.[m.id] || []).map(sId => allSeals.find(s => s.id === sId)).filter(Boolean);
+              const mSeal = SEAL_DEFINITIONS.find(s => s.name === data.equippedTitles?.[m.id]);
+              const mPrg = data.readingProgress?.[m.id] || {};
+              const catMap = {};
+              Object.keys(mPrg).forEach(bId => {
+                const book = data.books.find(b => b.id === bId);
+                if (book && mPrg[bId] >= book.pages) catMap[book.category] = (catMap[book.category] || 0) + 1;
+              });
+              const catData = Object.entries(catMap).map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count);
+              const subtitle = getReaderSubtitle(catData);
+              return (
+                <Panel key={m.id} className="member-card">
+                  <div className="member-avatar-lg">{m.avatar}</div>
+                  <div style={{ fontWeight: 700, color: "#E8E0D0", fontSize: 15, marginTop: 8 }}>{data.displayNames?.[m.id] || m.name}</div>
+                  <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 11, color: "#4A4235", letterSpacing: 0.5 }}>
+                    #{m.tag}
+                  </div>
+                  {(data.prestigeLevel?.[m.id] || 0) > 0 && (
+                    <div style={{ marginTop: 4 }}>
+                      <PrestigeEmblem level={data.prestigeLevel[m.id]} size={32} showLabel />
+                    </div>
+                  )}
+                  {data.equippedTitles?.[m.id] && (
+                    <GlowTitle title={data.equippedTitles[m.id]} color={mSeal?.color} />
+                  )}
+                  {subtitle && (
+                    <div style={{
+                      marginTop: 4, fontFamily: "'Rajdhani', sans-serif", fontWeight: 600,
+                      fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase",
+                      background: "linear-gradient(90deg, #D4AF37, #E8D44D, #D4AF37)",
+                      WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+                      backgroundClip: "text",
+                    }}>
+                      {subtitle}
+                    </div>
+                  )}
+                  <DiamondDivider />
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
+                    {mSeals.length > 0 ? mSeals.map(s => (
+                      <span key={s.id} className="mini-seal" style={{ borderColor: s.color, color: s.color }}>{s.icon} {s.name}</span>
+                    )) : (
+                      <span style={{ color: "#4A4235", fontSize: 12, fontStyle: "italic" }}>No titles yet</span>
+                    )}
+                  </div>
+                </Panel>
               );
-            })}
-          </div>
-        </Panel>
+            });
+          })()}
+        </div>
       </div>
 
       {/* Admin: Create Seal Modal */}
@@ -1786,8 +2154,33 @@ function TriumphsPage() {
           <input className="text-input" value={newTriumph.name} onChange={e => setNewTriumph(t => ({ ...t, name: e.target.value }))} placeholder="e.g. Read 3 books" />
           <label className="input-label">Description</label>
           <input className="text-input" value={newTriumph.desc} onChange={e => setNewTriumph(t => ({ ...t, desc: e.target.value }))} placeholder="What the user must do..." />
+          <label className="input-label">Tracking Type</label>
+          <select className="text-input" value={newTriumph.type} onChange={e => setNewTriumph(t => ({ ...t, type: e.target.value }))}>
+            <optgroup label="Auto-Tracked">
+              <option value="books_read">Books Completed</option>
+              <option value="reviews_written">Reviews Written</option>
+              <option value="threads_started">Threads Started</option>
+              <option value="bible_read">Bible Books Read</option>
+              <option value="reformed_books">Systematic Theology Books</option>
+              <option value="apologetics_books">Apologetics Books</option>
+              <option value="long_review">Long Reviews (500+ chars)</option>
+              <option value="soteriology_posts">Soteriology Forum Posts</option>
+              <option value="lbcf_discussions">Confessional Forum Posts</option>
+              <option value="replies_20">Forum Replies</option>
+              <option value="recommendations">Books Recommended</option>
+              <option value="seals_complete">Seals Completed</option>
+            </optgroup>
+            <optgroup label="Manual">
+              <option value="custom">Manual Tracking (admin +/-)</option>
+            </optgroup>
+          </select>
           <label className="input-label">Target (completions needed)</label>
           <input className="text-input" type="number" value={newTriumph.target} onChange={e => setNewTriumph(t => ({ ...t, target: e.target.value }))} />
+          {newTriumph.type !== "custom" && (
+            <div style={{ marginTop: 8, padding: "6px 10px", background: "rgba(39,174,96,0.06)", borderRadius: 4, fontSize: 11, color: "#27AE60", border: "1px solid #27AE6022" }}>
+              This triumph will auto-track progress from app activity.
+            </div>
+          )}
           <button className="gold-btn" style={{ width: "100%", marginTop: 12 }} onClick={() => addTriumph(showAddTriumph)}>Add Triumph</button>
         </div>
       </Modal>
@@ -1806,6 +2199,24 @@ function TriumphsPage() {
           </div>
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={!!confirmDeleteSeal}
+        onClose={() => setConfirmDeleteSeal(null)}
+        onConfirm={() => deleteSeal(confirmDeleteSeal)}
+        title="Delete Seal?"
+        message="This seal and all its triumphs will be permanently deleted for everyone. This cannot be undone."
+        confirmLabel="Delete Seal"
+      />
+
+      <ConfirmDialog
+        open={!!confirmDeleteTriumph}
+        onClose={() => setConfirmDeleteTriumph(null)}
+        onConfirm={() => { if (confirmDeleteTriumph) deleteTriumph(confirmDeleteTriumph.sealId, confirmDeleteTriumph.triumphId); }}
+        title="Delete Triumph?"
+        message="This triumph will be permanently removed from the seal."
+        confirmLabel="Delete Triumph"
+      />
     </div>
   );
 }
@@ -1814,7 +2225,7 @@ function TriumphsPage() {
 // PAGE: LIBRARY / READING TRACKER
 // ════════════════════════════════════════
 function LibraryPage() {
-  const { data, setData, currentUser } = useContext(AppContext);
+  const { data, setData, currentUser, showToast } = useContext(AppContext);
   const [filter, setFilter] = useState("All");
   const [showAddBook, setShowAddBook] = useState(false);
   const [selectedBook, setSelectedBook] = useState(null);
@@ -1843,6 +2254,7 @@ function LibraryPage() {
     setNewBook({ title: "", author: "", category: CATEGORIES[0], pages: "", coverUrl: "" });
     setCoverLoading(false);
     setShowAddBook(false);
+    showToast(`"${book.title}" added to library`);
   }
 
   async function searchCover() {
@@ -1856,6 +2268,7 @@ function LibraryPage() {
   function updateProgress(bookId) {
     const pg = parseInt(updatePage);
     if (isNaN(pg)) return;
+    const book = data.books.find(b => b.id === bookId);
     setData(d => ({
       ...d,
       readingProgress: {
@@ -1865,6 +2278,8 @@ function LibraryPage() {
     }));
     setUpdatePage("");
     setSelectedBook(null);
+    if (book && pg >= book.pages) showToast(`"${book.title}" completed!`);
+    else showToast("Progress updated");
   }
 
   function getProgress(bookId) {
@@ -1904,6 +2319,7 @@ function LibraryPage() {
     setInviteMembers([]);
     setInviteNote("");
     setSelectedBook(null);
+    showToast("Group read invite sent");
   }
 
   function sendChatMessage() {
@@ -2394,11 +2810,12 @@ function LibraryPage() {
 // PAGE: REVIEWS
 // ════════════════════════════════════════
 function ReviewsPage() {
-  const { data, setData, currentUser, isAdmin } = useContext(AppContext);
+  const { data, setData, currentUser, isAdmin, showToast } = useContext(AppContext);
   const [showWrite, setShowWrite] = useState(false);
   const [filterCat, setFilterCat] = useState("All");
   const [filterRating, setFilterRating] = useState(0);
   const [newReview, setNewReview] = useState({ bookId: "", rating: 5, text: "" });
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   const reviews = data.reviews
     .filter(r => {
@@ -2415,10 +2832,12 @@ function ReviewsPage() {
     setData(d => ({ ...d, reviews: [...d.reviews, review] }));
     setNewReview({ bookId: "", rating: 5, text: "" });
     setShowWrite(false);
+    showToast("Review posted");
   }
 
   function deleteReview(reviewId) {
     setData(d => ({ ...d, reviews: d.reviews.filter(r => r.id !== reviewId) }));
+    showToast("Review deleted", "info");
   }
 
   return (
@@ -2444,7 +2863,20 @@ function ReviewsPage() {
       </div>
 
       <div className="reviews-list">
-        {reviews.map(review => {
+        {reviews.length === 0 ? (
+          <Panel>
+            <div style={{ textAlign: "center", padding: "40px 20px" }}>
+              <Star size={36} style={{ color: "#2A2520", marginBottom: 12 }} />
+              <div style={{ color: "#6B6152", fontSize: 15, fontWeight: 600, marginBottom: 6 }}>No reviews yet</div>
+              <div style={{ color: "#4A4235", fontSize: 13, maxWidth: 320, margin: "0 auto" }}>
+                Be the first to share your thoughts on a book. Your review helps the fireteam decide what to read next.
+              </div>
+              <button className="gold-btn" style={{ marginTop: 16 }} onClick={() => setShowWrite(true)}>
+                <Edit3 size={14} /> Write the First Review
+              </button>
+            </div>
+          </Panel>
+        ) : reviews.map(review => {
           const book = data.books.find(b => b.id === review.bookId);
           const member = MEMBERS.find(m => m.id === review.memberId);
           return (
@@ -2464,7 +2896,7 @@ function ReviewsPage() {
               <p className="review-text"><ScriptureText text={review.text} /></p>
               {(isAdmin || review.memberId === currentUser.id) && (
                 <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-                  <button className="admin-delete-btn" onClick={() => deleteReview(review.id)}>
+                  <button className="admin-delete-btn" onClick={() => setConfirmDelete(review.id)}>
                     <X size={12} /> Delete
                   </button>
                 </div>
@@ -2473,6 +2905,15 @@ function ReviewsPage() {
           );
         })}
       </div>
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => deleteReview(confirmDelete)}
+        title="Delete Review?"
+        message="This review will be permanently removed. This cannot be undone."
+        confirmLabel="Delete Review"
+      />
 
       <Modal open={showWrite} onClose={() => setShowWrite(false)} title="Write a Review">
         <div style={{ padding: 16 }}>
@@ -2502,12 +2943,14 @@ function ReviewsPage() {
 // PAGE: FORUM
 // ════════════════════════════════════════
 function ForumPage() {
-  const { data, setData, currentUser, isAdmin } = useContext(AppContext);
+  const { data, setData, currentUser, isAdmin, showToast } = useContext(AppContext);
   const [selectedThread, setSelectedThread] = useState(null);
   const [filterCat, setFilterCat] = useState("All");
   const [showNewThread, setShowNewThread] = useState(false);
   const [newThread, setNewThread] = useState({ title: "", category: FORUM_CATEGORIES[0], text: "", bookId: "" });
   const [replyText, setReplyText] = useState("");
+  const [confirmDeleteThread, setConfirmDeleteThread] = useState(null);
+  const [confirmDeletePost, setConfirmDeletePost] = useState(null);
 
   const pinnedIds = data.pinnedThreads || [];
   const threads = (filterCat === "All" ? data.threads : data.threads.filter(t => t.category === filterCat))
@@ -2535,6 +2978,7 @@ function ForumPage() {
     setNewThread({ title: "", category: FORUM_CATEGORIES[0], text: "", bookId: "" });
     setShowNewThread(false);
     setSelectedThread(t.id);
+    showToast("Thread created");
   }
 
   function postReply() {
@@ -2545,6 +2989,7 @@ function ForumPage() {
       threads: d.threads.map(t => t.id === selectedThread ? { ...t, posts: [...t.posts, post] } : t),
     }));
     setReplyText("");
+    showToast("Reply posted");
   }
 
   function deleteThread(threadId) {
@@ -2554,6 +2999,7 @@ function ForumPage() {
       pinnedThreads: (d.pinnedThreads || []).filter(id => id !== threadId),
     }));
     setSelectedThread(null);
+    showToast("Thread deleted", "info");
   }
 
   function deletePost(threadId, postId) {
@@ -2561,12 +3007,15 @@ function ForumPage() {
       ...d,
       threads: d.threads.map(t => t.id === threadId ? { ...t, posts: t.posts.filter(p => p.id !== postId) } : t),
     }));
+    showToast("Reply deleted", "info");
   }
 
   function togglePin(threadId) {
     setData(d => {
       const pins = d.pinnedThreads || [];
-      return { ...d, pinnedThreads: pins.includes(threadId) ? pins.filter(id => id !== threadId) : [...pins, threadId] };
+      const isPinned = pins.includes(threadId);
+      showToast(isPinned ? "Thread unpinned" : "Thread pinned", "info");
+      return { ...d, pinnedThreads: isPinned ? pins.filter(id => id !== threadId) : [...pins, threadId] };
     });
   }
 
@@ -2597,7 +3046,7 @@ function ForumPage() {
                 <button className="admin-delete-btn" style={{ color: "#D4AF37", borderColor: "#D4AF3733" }} onClick={() => togglePin(thread.id)}>
                   {pinnedIds.includes(thread.id) ? "Unpin" : "Pin Thread"}
                 </button>
-                <button className="admin-delete-btn" onClick={() => deleteThread(thread.id)}>
+                <button className="admin-delete-btn" onClick={() => setConfirmDeleteThread(thread.id)}>
                   <X size={12} /> Delete Thread
                 </button>
               </div>
@@ -2615,7 +3064,7 @@ function ForumPage() {
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span className="post-date">{post.date}</span>
                     {(isAdmin || post.authorId === currentUser.id) && i > 0 && (
-                      <button className="admin-delete-btn" onClick={() => deletePost(thread.id, post.id)}>
+                      <button className="admin-delete-btn" onClick={() => setConfirmDeletePost({ threadId: thread.id, postId: post.id })}>
                         <X size={10} />
                       </button>
                     )}
@@ -2662,7 +3111,20 @@ function ForumPage() {
       </div>
 
       <div className="thread-list">
-        {threads.sort((a, b) => b.date.localeCompare(a.date)).map(thread => {
+        {threads.length === 0 ? (
+          <Panel>
+            <div style={{ textAlign: "center", padding: "40px 20px" }}>
+              <MessageSquare size={36} style={{ color: "#2A2520", marginBottom: 12 }} />
+              <div style={{ color: "#6B6152", fontSize: 15, fontWeight: 600, marginBottom: 6 }}>No discussions yet</div>
+              <div style={{ color: "#4A4235", fontSize: 13, maxWidth: 320, margin: "0 auto" }}>
+                Start a conversation about theology, Scripture, or a book you're reading. Iron sharpens iron.
+              </div>
+              <button className="gold-btn" style={{ marginTop: 16 }} onClick={() => setShowNewThread(true)}>
+                <Plus size={14} /> Start the First Discussion
+              </button>
+            </div>
+          </Panel>
+        ) : threads.sort((a, b) => b.date.localeCompare(a.date)).map(thread => {
           const author = MEMBERS.find(m => m.id === thread.authorId);
           const lastPost = thread.posts[thread.posts.length - 1];
           const lastAuthor = MEMBERS.find(m => m.id === lastPost?.authorId);
@@ -2676,7 +3138,7 @@ function ForumPage() {
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ color: "#6B6152", fontSize: 12 }}>{thread.posts.length} {thread.posts.length === 1 ? "post" : "posts"}</span>
                   {isAdmin && (
-                    <button className="admin-delete-btn" onClick={(e) => { e.stopPropagation(); deleteThread(thread.id); }} style={{ padding: "2px 6px" }}>
+                    <button className="admin-delete-btn" onClick={(e) => { e.stopPropagation(); setConfirmDeleteThread(thread.id); }} style={{ padding: "2px 6px" }}>
                       <X size={10} />
                     </button>
                   )}
@@ -2714,6 +3176,24 @@ function ForumPage() {
           <button className="gold-btn" style={{ marginTop: 16, width: "100%" }} onClick={createThread}>Create Thread</button>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!confirmDeleteThread}
+        onClose={() => setConfirmDeleteThread(null)}
+        onConfirm={() => deleteThread(confirmDeleteThread)}
+        title="Delete Thread?"
+        message="This thread and all its replies will be permanently deleted. This cannot be undone."
+        confirmLabel="Delete Thread"
+      />
+
+      <ConfirmDialog
+        open={!!confirmDeletePost}
+        onClose={() => setConfirmDeletePost(null)}
+        onConfirm={() => { if (confirmDeletePost) deletePost(confirmDeletePost.threadId, confirmDeletePost.postId); }}
+        title="Delete Reply?"
+        message="This reply will be permanently removed."
+        confirmLabel="Delete Reply"
+      />
     </div>
   );
 }
@@ -2722,7 +3202,15 @@ function ForumPage() {
 // PAGE: MEMBERS
 // ════════════════════════════════════════
 function MembersPage() {
-  const { data, setPage, setProfileTarget } = useContext(AppContext);
+  const { data, setData, setPage, setProfileTarget, currentUser, showToast } = useContext(AppContext);
+  const [showAddFriend, setShowAddFriend] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(null);
+
+  const myFriends = data.friends?.[currentUser.id] || [];
+  const friendRequests = data.friendRequests || [];
+  const incomingRequests = friendRequests.filter(r => r.toId === currentUser.id && r.status === "pending");
+  const outgoingRequests = friendRequests.filter(r => r.fromId === currentUser.id && r.status === "pending");
 
   function getMemberStats(memberId) {
     const prg = data.readingProgress?.[memberId] || {};
@@ -2736,57 +3224,355 @@ function MembersPage() {
     const threadsStarted = data.threads.filter(t => t.authorId === memberId).length;
     const replies = data.threads.reduce((acc, t) => acc + t.posts.filter(p => p.authorId === memberId).length, 0);
     const sealsEarned = (data.completedSeals?.[memberId] || []).length;
-    const lightLevel = booksCompleted * 50 + reviewsWritten * 30 + threadsStarted * 20 + replies * 5 + sealsEarned * 100;
-    return { booksCompleted, pagesRead, reviewsWritten, threadsStarted, replies, sealsEarned, lightLevel };
+    return { booksCompleted, pagesRead, reviewsWritten, threadsStarted, replies, sealsEarned };
   }
 
-  const ranked = MEMBERS.map(m => ({ ...m, stats: getMemberStats(m.id) })).sort((a, b) => b.stats.lightLevel - a.stats.lightLevel);
+  const friendMembers = ALL_USERS.filter(m => myFriends.includes(m.id));
+  const ranked = friendMembers.map(m => ({ ...m, stats: getMemberStats(m.id) })).sort((a, b) => b.stats.booksCompleted - a.stats.booksCompleted);
+
+  // Search: exclude self, current friends, and users with pending outgoing requests
+  const outgoingIds = outgoingRequests.map(r => r.toId);
+  const searchResults = searchQuery.trim().length > 0
+    ? ALL_USERS.filter(u => {
+        if (u.id === currentUser.id) return false;
+        if (myFriends.includes(u.id)) return false;
+        const q = searchQuery.toLowerCase().trim();
+        const gamertag = `${u.name}#${u.tag}`.toLowerCase();
+        return u.name.toLowerCase().includes(q) || u.tag.includes(q) || gamertag.includes(q);
+      })
+    : [];
+
+  function sendFriendRequest(userId) {
+    const userName = ALL_USERS.find(u => u.id === userId)?.name;
+    setData(d => ({
+      ...d,
+      friendRequests: [...(d.friendRequests || []), {
+        id: `fr${Date.now()}`,
+        fromId: currentUser.id,
+        toId: userId,
+        date: new Date().toISOString().split("T")[0],
+        status: "pending",
+      }],
+    }));
+    showToast(`Friend request sent to ${userName}`);
+  }
+
+  function acceptFriendRequest(requestId) {
+    const req = friendRequests.find(r => r.id === requestId);
+    if (!req) return;
+    const fromName = ALL_USERS.find(u => u.id === req.fromId)?.name;
+    setData(d => {
+      const friends = { ...(d.friends || {}) };
+      const myList = [...(friends[currentUser.id] || [])];
+      if (!myList.includes(req.fromId)) myList.push(req.fromId);
+      friends[currentUser.id] = myList;
+      const theirList = [...(friends[req.fromId] || [])];
+      if (!theirList.includes(currentUser.id)) theirList.push(currentUser.id);
+      friends[req.fromId] = theirList;
+      return {
+        ...d,
+        friends,
+        friendRequests: (d.friendRequests || []).map(r =>
+          r.id === requestId ? { ...r, status: "accepted" } : r
+        ),
+        activities: [...d.activities, {
+          id: `a${Date.now()}`, type: "friend_add", memberId: currentUser.id,
+          text: `and ${ALL_USERS.find(u => u.id === req.fromId)?.name} are now fireteam members`,
+          date: new Date().toISOString().split("T")[0], icon: "★",
+        }],
+      };
+    });
+    showToast(`You and ${fromName} are now fireteam members`);
+  }
+
+  function declineFriendRequest(requestId) {
+    setData(d => ({
+      ...d,
+      friendRequests: (d.friendRequests || []).map(r =>
+        r.id === requestId ? { ...r, status: "declined" } : r
+      ),
+    }));
+    showToast("Friend request declined", "info");
+  }
+
+  function cancelFriendRequest(requestId) {
+    setData(d => ({
+      ...d,
+      friendRequests: (d.friendRequests || []).filter(r => r.id !== requestId),
+    }));
+    showToast("Friend request cancelled", "info");
+  }
+
+  function removeFriend(userId) {
+    const friendName = ALL_USERS.find(u => u.id === userId)?.name;
+    setData(d => {
+      const friends = { ...(d.friends || {}) };
+      friends[currentUser.id] = (friends[currentUser.id] || []).filter(id => id !== userId);
+      friends[userId] = (friends[userId] || []).filter(id => id !== currentUser.id);
+      return { ...d, friends };
+    });
+    setShowRemoveConfirm(null);
+    showToast(`${friendName} removed from fireteam`, "info");
+  }
+
+  function getSearchUserStatus(userId) {
+    if (myFriends.includes(userId)) return "friend";
+    const outgoing = outgoingRequests.find(r => r.toId === userId);
+    if (outgoing) return { type: "outgoing", id: outgoing.id };
+    const incoming = incomingRequests.find(r => r.fromId === userId);
+    if (incoming) return { type: "incoming", id: incoming.id };
+    return "none";
+  }
 
   return (
     <div className="page-content">
       <div className="page-header">
         <Users size={24} style={{ color: "#D4AF37" }} />
         <h2>FIRETEAM</h2>
+        <button className="gold-btn" onClick={() => setShowAddFriend(true)}>
+          <Plus size={14} /> Add Friend
+        </button>
       </div>
 
-      <div className="members-grid">
-        {ranked.map((m, i) => {
-          const seal = SEAL_DEFINITIONS.find(s => s.name === data.equippedTitles?.[m.id]);
-          return (
-            <Panel
-              key={m.id}
-              className="member-card"
-              glow={i === 0 ? "#D4AF37" : undefined}
-              onClick={() => { setProfileTarget(m.id); setPage("profile"); }}
-            >
-              <div className="member-rank">#{i + 1}</div>
-              <div className="member-avatar-lg" style={i === 0 ? { borderColor: "#D4AF37", boxShadow: "0 0 20px #D4AF3733" } : {}}>
-                {m.avatar}
-              </div>
-              <div style={{ fontWeight: 700, color: "#E8E0D0", fontSize: 15, marginTop: 8 }}>{m.name}</div>
-              {(data.prestigeLevel?.[m.id] || 0) > 0 && (
-                <div style={{ marginTop: 4 }}>
-                  <PrestigeEmblem level={data.prestigeLevel[m.id]} size={32} showLabel />
+      {/* Your gamertag */}
+      <Panel style={{ marginBottom: 20, display: "flex", alignItems: "center", gap: 12, padding: "12px 16px" }}>
+        <div className="avatar" style={{ width: 36, height: 36, fontSize: 12 }}>{currentUser.avatar}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ color: "#6B6152", fontSize: 10, letterSpacing: 1.5, fontFamily: "'Rajdhani', sans-serif", fontWeight: 600 }}>YOUR GAMERTAG</div>
+          <div style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: 18, color: "#E8E0D0", letterSpacing: 1 }}>
+            {data.displayNames?.[currentUser.id] || currentUser.name}<span style={{ color: "#4A4235" }}>#</span><span style={{ color: "#D4AF37" }}>{currentUser.tag}</span>
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ color: "#6B6152", fontSize: 10, letterSpacing: 1.5, fontFamily: "'Rajdhani', sans-serif", fontWeight: 600 }}>FIRETEAM</div>
+          <div style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: 18, color: "#D4AF37" }}>{myFriends.length}</div>
+        </div>
+      </Panel>
+
+      {/* Incoming Friend Requests */}
+      {incomingRequests.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <Send size={16} style={{ color: "#2B9EB3" }} />
+            <span className="section-title">FRIEND REQUESTS</span>
+            <span className="invite-count-badge">{incomingRequests.length}</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {incomingRequests.map(req => {
+              const fromUser = ALL_USERS.find(u => u.id === req.fromId);
+              if (!fromUser) return null;
+              return (
+                <Panel key={req.id} className="friend-search-result" glow="#2B9EB3">
+                  <div className="avatar" style={{ width: 40, height: 40, fontSize: 13 }}>{fromUser.avatar}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, color: "#E8E0D0", fontSize: 14 }}>{data.displayNames?.[fromUser.id] || fromUser.name}</div>
+                    <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 12, color: "#6B6152", letterSpacing: 0.5 }}>
+                      {fromUser.name}<span style={{ color: "#4A4235" }}>#</span><span style={{ color: "#D4AF37" }}>{fromUser.tag}</span>
+                    </div>
+                    <div style={{ color: "#2B9EB3", fontSize: 11, marginTop: 2 }}>Wants to join your fireteam · {req.date}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button className="gold-btn" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => acceptFriendRequest(req.id)}>
+                      <Check size={12} /> Accept
+                    </button>
+                    <button className="decline-btn" style={{ padding: "6px 8px" }} onClick={() => declineFriendRequest(req.id)}>
+                      <X size={12} />
+                    </button>
+                  </div>
+                </Panel>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Friends grid */}
+      {ranked.length === 0 ? (
+        <Panel>
+          <div style={{ textAlign: "center", padding: "40px 20px" }}>
+            <Users size={36} style={{ color: "#2A2520", marginBottom: 12 }} />
+            <div style={{ color: "#6B6152", fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Your fireteam is empty</div>
+            <div style={{ color: "#4A4235", fontSize: 13, maxWidth: 320, margin: "0 auto" }}>
+              Search for friends by their gamertag to build your fireteam. Share your tag so others can find you.
+            </div>
+            <div style={{
+              margin: "16px auto 0", padding: "10px 20px", background: "rgba(212,175,55,0.06)",
+              border: "1px dashed #D4AF3744", borderRadius: 6, display: "inline-block",
+              fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: 20, letterSpacing: 1,
+              color: "#E8E0D0",
+            }}>
+              {data.displayNames?.[currentUser.id] || currentUser.name}<span style={{ color: "#4A4235" }}>#</span><span style={{ color: "#D4AF37" }}>{currentUser.tag}</span>
+            </div>
+            <div style={{ color: "#4A4235", fontSize: 11, marginTop: 8 }}>Share this tag with friends</div>
+            <button className="gold-btn" style={{ marginTop: 16 }} onClick={() => setShowAddFriend(true)}>
+              <Search size={14} /> Find Friends
+            </button>
+          </div>
+        </Panel>
+      ) : (
+        <div className="members-grid">
+          {ranked.map((m, i) => {
+            const seal = SEAL_DEFINITIONS.find(s => s.name === data.equippedTitles?.[m.id]);
+            const mPrg = data.readingProgress?.[m.id] || {};
+            const catMap = {};
+            Object.keys(mPrg).forEach(bId => {
+              const book = data.books.find(b => b.id === bId);
+              if (book && mPrg[bId] >= book.pages) {
+                catMap[book.category] = (catMap[book.category] || 0) + 1;
+              }
+            });
+            const catData = Object.entries(catMap).map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count);
+            const subtitle = getReaderSubtitle(catData);
+            return (
+              <Panel
+                key={m.id}
+                className="member-card"
+                glow={i === 0 ? "#D4AF37" : undefined}
+                onClick={() => { setProfileTarget(m.id); setPage("profile"); }}
+              >
+                <div className="member-rank">#{i + 1}</div>
+                <div className="member-avatar-lg" style={i === 0 ? { borderColor: "#D4AF37", boxShadow: "0 0 20px #D4AF3733" } : {}}>
+                  {m.avatar}
                 </div>
-              )}
-              {data.equippedTitles?.[m.id] && (
-                <GlowTitle title={data.equippedTitles[m.id]} color={seal?.color} />
-              )}
-              <div className="member-light-level">
-                <Zap size={12} style={{ color: "#D4AF37" }} />
-                <span>Light {m.stats.lightLevel}</span>
+                <div style={{ fontWeight: 700, color: "#E8E0D0", fontSize: 15, marginTop: 8 }}>{data.displayNames?.[m.id] || m.name}</div>
+                <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 11, color: "#4A4235", letterSpacing: 0.5 }}>
+                  #{m.tag}
+                </div>
+                {(data.prestigeLevel?.[m.id] || 0) > 0 && (
+                  <div style={{ marginTop: 4 }}>
+                    <PrestigeEmblem level={data.prestigeLevel[m.id]} size={32} showLabel />
+                  </div>
+                )}
+                {data.equippedTitles?.[m.id] && (
+                  <GlowTitle title={data.equippedTitles[m.id]} color={seal?.color} />
+                )}
+                {subtitle && (
+                  <div style={{
+                    marginTop: 4, fontFamily: "'Rajdhani', sans-serif", fontWeight: 600,
+                    fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase",
+                    background: "linear-gradient(90deg, #D4AF37, #E8D44D, #D4AF37)",
+                    WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+                    backgroundClip: "text",
+                  }}>
+                    {subtitle}
+                  </div>
+                )}
+                <DiamondDivider />
+                <div className="member-stats-grid">
+                  <div className="member-stat"><span className="stat-num">{m.stats.booksCompleted}</span><span className="stat-lbl">Books</span></div>
+                  <div className="member-stat"><span className="stat-num">{m.stats.pagesRead.toLocaleString()}</span><span className="stat-lbl">Pages</span></div>
+                  <div className="member-stat"><span className="stat-num">{m.stats.reviewsWritten}</span><span className="stat-lbl">Reviews</span></div>
+                  <div className="member-stat"><span className="stat-num">{m.stats.sealsEarned}</span><span className="stat-lbl">Seals</span></div>
+                </div>
+                <button
+                  className="remove-friend-btn"
+                  onClick={(e) => { e.stopPropagation(); setShowRemoveConfirm(m.id); }}
+                >
+                  <X size={10} /> Remove
+                </button>
+              </Panel>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add Friend Modal */}
+      <Modal open={showAddFriend} onClose={() => { setShowAddFriend(false); setSearchQuery(""); }} title="Add Friend">
+        <div style={{ padding: 16 }}>
+          <div style={{ position: "relative", marginBottom: 16 }}>
+            <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#4A4235" }} />
+            <input
+              className="text-input"
+              style={{ paddingLeft: 36 }}
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search by name or gamertag (e.g. Silas#4490)"
+              autoFocus
+            />
+          </div>
+
+          {searchQuery.trim().length === 0 ? (
+            <div style={{ textAlign: "center", padding: "24px 0" }}>
+              <Hash size={28} style={{ color: "#2A2520", marginBottom: 8 }} />
+              <div style={{ color: "#4A4235", fontSize: 13 }}>Enter a name or gamertag to search</div>
+              <div style={{ color: "#33302A", fontSize: 12, marginTop: 4 }}>
+                Gamertags look like <span style={{ color: "#6B6152", fontFamily: "'Rajdhani', sans-serif", fontWeight: 600 }}>Name#1234</span>
               </div>
-              <DiamondDivider />
-              <div className="member-stats-grid">
-                <div className="member-stat"><span className="stat-num">{m.stats.booksCompleted}</span><span className="stat-lbl">Books</span></div>
-                <div className="member-stat"><span className="stat-num">{m.stats.pagesRead.toLocaleString()}</span><span className="stat-lbl">Pages</span></div>
-                <div className="member-stat"><span className="stat-num">{m.stats.reviewsWritten}</span><span className="stat-lbl">Reviews</span></div>
-                <div className="member-stat"><span className="stat-num">{m.stats.sealsEarned}</span><span className="stat-lbl">Seals</span></div>
-              </div>
-            </Panel>
-          );
-        })}
-      </div>
+            </div>
+          ) : searchResults.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "24px 0" }}>
+              <Search size={28} style={{ color: "#2A2520", marginBottom: 8 }} />
+              <div style={{ color: "#4A4235", fontSize: 13 }}>No users found</div>
+              <div style={{ color: "#33302A", fontSize: 12, marginTop: 4 }}>Try a different name or check the tag number</div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {searchResults.map(user => {
+                const status = getSearchUserStatus(user.id);
+                const displayN = data.displayNames?.[user.id] || user.name;
+                return (
+                  <div key={user.id} className="friend-search-result">
+                    <div className="avatar" style={{ width: 36, height: 36, fontSize: 12 }}>{user.avatar}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, color: "#E8E0D0", fontSize: 14 }}>{displayN}</div>
+                      <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 12, color: "#6B6152", letterSpacing: 0.5 }}>
+                        {user.name}<span style={{ color: "#4A4235" }}>#</span><span style={{ color: "#D4AF37" }}>{user.tag}</span>
+                      </div>
+                    </div>
+                    {status === "friend" ? (
+                      <span style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 11, color: "#27AE60", fontWeight: 600, letterSpacing: 1 }}>
+                        <Check size={12} /> FRIENDS
+                      </span>
+                    ) : status?.type === "outgoing" ? (
+                      <button className="decline-btn" style={{ padding: "6px 12px", fontSize: 11, gap: 4, color: "#A09880", borderColor: "#6B615233" }} onClick={() => cancelFriendRequest(status.id)}>
+                        <Clock size={11} /> Pending
+                      </button>
+                    ) : status?.type === "incoming" ? (
+                      <button className="gold-btn" style={{ padding: "6px 14px", fontSize: 12 }} onClick={() => acceptFriendRequest(status.id)}>
+                        <Check size={12} /> Accept
+                      </button>
+                    ) : (
+                      <button className="gold-btn" style={{ padding: "6px 14px", fontSize: 12 }} onClick={() => sendFriendRequest(user.id)}>
+                        <Send size={12} /> Request
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Remove Friend Confirmation */}
+      <Modal open={!!showRemoveConfirm} onClose={() => setShowRemoveConfirm(null)} title="Remove Friend">
+        <div style={{ padding: 20, textAlign: "center" }}>
+          {(() => {
+            const friend = ALL_USERS.find(u => u.id === showRemoveConfirm);
+            if (!friend) return null;
+            return (
+              <>
+                <div className="avatar" style={{ width: 48, height: 48, fontSize: 16, margin: "0 auto 12px" }}>{friend.avatar}</div>
+                <div style={{ fontWeight: 700, color: "#E8E0D0", fontSize: 16, marginBottom: 4 }}>{friend.name}</div>
+                <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 13, color: "#6B6152", marginBottom: 16 }}>
+                  {friend.name}<span style={{ color: "#4A4235" }}>#</span><span style={{ color: "#D4AF37" }}>{friend.tag}</span>
+                </div>
+                <p style={{ color: "#A09880", fontSize: 13, marginBottom: 20 }}>
+                  Remove from your fireteam? You can always add them back later.
+                </p>
+                <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+                  <button className="decline-btn" style={{ padding: "10px 20px", gap: 6, color: "#C0392B", borderColor: "#C0392B44" }} onClick={() => removeFriend(showRemoveConfirm)}>
+                    <X size={14} /> Remove
+                  </button>
+                  <button className="gold-btn" onClick={() => setShowRemoveConfirm(null)} style={{ opacity: 0.7 }}>
+                    Cancel
+                  </button>
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -3463,10 +4249,39 @@ function DirectorPage() {
 // PAGE: PROFILE
 // ════════════════════════════════════════
 function ProfilePage() {
-  const { data, setData, currentUser, profileTarget, setPage } = useContext(AppContext);
+  const { data, setData, currentUser, profileTarget, setPage, showToast, logout } = useContext(AppContext);
   const memberId = profileTarget || currentUser.id;
-  const member = MEMBERS.find(m => m.id === memberId);
+  const member = ALL_USERS.find(m => m.id === memberId);
   const isOwn = memberId === currentUser.id;
+  const [showSettings, setShowSettings] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [nameError, setNameError] = useState("");
+
+  // Resolve display name: check overrides first, then base member name
+  const displayName = data.displayNames?.[memberId] || member?.name || "Unknown";
+  const displayTag = member?.tag || "0000";
+
+  function openSettings() {
+    setEditName(displayName);
+    setNameError("");
+    setShowSettings(true);
+  }
+
+  function saveName() {
+    const trimmed = editName.trim();
+    if (trimmed.length < 2) { setNameError("Name must be at least 2 characters"); return; }
+    if (trimmed.length > 16) { setNameError("Name must be 16 characters or less"); return; }
+    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) { setNameError("Letters, numbers, and underscores only"); return; }
+    setData(d => ({
+      ...d,
+      displayNames: { ...(d.displayNames || {}), [memberId]: trimmed },
+    }));
+    // Also update the stored currentUser so it persists on reload
+    const updatedUser = { ...currentUser, name: trimmed };
+    window.storage.set("current-user-1711s-v10", JSON.stringify(updatedUser)).catch(() => {});
+    setShowSettings(false);
+    showToast("Display name updated");
+  }
 
   const prg = data.readingProgress?.[memberId] || {};
   let booksCompleted = 0, pagesRead = 0;
@@ -3482,10 +4297,10 @@ function ProfilePage() {
   const threadsStarted = data.threads.filter(t => t.authorId === memberId).length;
   const replies = data.threads.reduce((acc, t) => acc + t.posts.filter(p => p.authorId === memberId).length, 0);
   const sealsEarned = (data.completedSeals?.[memberId] || []).length;
-  const lightLevel = booksCompleted * 50 + reviewsWritten * 30 + threadsStarted * 20 + replies * 5 + sealsEarned * 100;
 
   const seal = SEAL_DEFINITIONS.find(s => s.name === data.equippedTitles?.[memberId]);
-  const completedSealDefs = (data.completedSeals?.[memberId] || []).map(sId => SEAL_DEFINITIONS.find(s => s.id === sId)).filter(Boolean);
+  const allSealDefs = [...SEAL_DEFINITIONS, ...(data.customSeals || [])];
+  const completedSealDefs = (data.completedSeals?.[memberId] || []).map(sId => allSealDefs.find(s => s.id === sId)).filter(Boolean);
 
   // Build category breakdown from completed books
   const categoryMap = {};
@@ -3501,6 +4316,7 @@ function ProfilePage() {
 
   function equipTitle(sealName) {
     setData(d => ({ ...d, equippedTitles: { ...d.equippedTitles, [memberId]: sealName } }));
+    showToast(`Title "${sealName}" equipped`);
   }
 
   return (
@@ -3514,8 +4330,20 @@ function ProfilePage() {
       <Panel className="profile-header-card" glow={seal?.color || "#D4AF37"}>
         <div className="profile-top">
           <div className="profile-avatar-xl">{member.avatar}</div>
-          <div>
-            <h2 style={{ margin: 0, color: "#E8E0D0", fontSize: 24 }}>{member.name}</h2>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <h2 style={{ margin: 0, color: "#E8E0D0", fontSize: 24 }}>{displayName}</h2>
+              {isOwn && (
+                <button className="icon-btn" onClick={openSettings} title="Settings" style={{ color: "#6B6152" }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                  </svg>
+                </button>
+              )}
+            </div>
+            <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 13, color: "#6B6152", letterSpacing: 0.5, marginTop: 2 }}>
+              {displayName}<span style={{ color: "#4A4235" }}>#</span><span style={{ color: "#D4AF37" }}>{displayTag}</span>
+            </div>
             {data.equippedTitles?.[memberId] && (
               <GlowTitle title={data.equippedTitles[memberId]} color={seal?.color} />
             )}
@@ -3537,10 +4365,6 @@ function ProfilePage() {
                 <span style={{ opacity: 0.5 }}>◆</span>
               </div>
             )}
-            <div className="member-light-level" style={{ marginTop: 8 }}>
-              <Zap size={14} style={{ color: "#D4AF37" }} />
-              <span style={{ fontSize: 16 }}>Light Level {lightLevel}</span>
-            </div>
           </div>
         </div>
 
@@ -3632,29 +4456,77 @@ function ProfilePage() {
         );
       })()}
 
-      {/* Earned Seals */}
-      {completedSealDefs.length > 0 && (
-        <>
-          <div className="section-title" style={{ margin: "24px 0 12px" }}>EARNED SEALS</div>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            {completedSealDefs.map(s => (
-              <Panel key={s.id} className="profile-seal-badge" glow={s.color} onClick={isOwn ? () => equipTitle(s.name) : undefined}>
-                <span style={{ fontSize: 28 }}>{s.icon}</span>
-                <div>
-                  <GlowTitle title={s.name} color={s.color} />
-                  <div style={{ fontSize: 11, color: "#6B6152" }}>{s.subtitle}</div>
+      {/* Titles & Seals */}
+      <div className="section-title" style={{ margin: "24px 0 12px" }}>TITLES & SEALS</div>
+      {completedSealDefs.length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {completedSealDefs.map(s => {
+            const isEquipped = data.equippedTitles?.[memberId] === s.name;
+            return (
+              <Panel key={s.id} className="profile-seal-card" glow={isEquipped ? s.color : undefined}
+                onClick={isOwn ? () => equipTitle(s.name) : undefined}
+                style={{ cursor: isOwn ? "pointer" : "default" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{
+                    width: 52, height: 52, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
+                    background: `${s.color}12`, border: `1px solid ${s.color}33`, fontSize: 28, flexShrink: 0,
+                  }}>
+                    {s.icon}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <GlowTitle title={s.name} color={s.color} />
+                      {isEquipped && <span className="equipped-badge">EQUIPPED</span>}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#6B6152", marginTop: 2 }}>{s.subtitle}</div>
+                    <div style={{ fontSize: 12, color: "#8A7E6B", marginTop: 4, lineHeight: 1.4 }}>{s.description}</div>
+                  </div>
                 </div>
-                {isOwn && data.equippedTitles?.[memberId] === s.name && (
-                  <span className="equipped-badge">EQUIPPED</span>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border-subtle)" }}>
+                  {s.triumphs.map(t => (
+                    <span key={t.id} style={{
+                      fontSize: 10, fontFamily: "'Rajdhani', sans-serif", fontWeight: 600,
+                      letterSpacing: 0.8, padding: "2px 8px", borderRadius: 3,
+                      background: `${s.color}12`, color: s.color, border: `1px solid ${s.color}22`,
+                    }}>
+                      <Check size={9} style={{ marginRight: 3 }} />{t.name}
+                    </span>
+                  ))}
+                </div>
+                {isOwn && !isEquipped && (
+                  <div style={{ color: "#4A4235", fontSize: 11, marginTop: 8, fontStyle: "italic" }}>
+                    Tap to equip this title
+                  </div>
                 )}
               </Panel>
-            ))}
+            );
+          })}
+        </div>
+      ) : (
+        <Panel>
+          <div style={{ textAlign: "center", padding: "32px 20px" }}>
+            <Trophy size={32} style={{ color: "#2A2520", marginBottom: 10 }} />
+            <div style={{ color: "#6B6152", fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No titles earned yet</div>
+            <div style={{ color: "#4A4235", fontSize: 12 }}>
+              {isOwn ? "Complete all triumphs within a seal on the Triumphs page to earn titles" : `${displayName} hasn't earned any titles yet`}
+            </div>
           </div>
-        </>
+        </Panel>
       )}
 
       {/* Bookshelf */}
       <div className="section-title" style={{ margin: "24px 0 12px" }}>BOOKSHELF</div>
+      {bookshelf.length === 0 ? (
+        <Panel>
+          <div style={{ textAlign: "center", padding: "32px 20px" }}>
+            <BookOpen size={32} style={{ color: "#2A2520", marginBottom: 10 }} />
+            <div style={{ color: "#6B6152", fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No books started</div>
+            <div style={{ color: "#4A4235", fontSize: 12 }}>
+              {isOwn ? "Head to the Library to start tracking your first book" : `${member.name} hasn't started reading yet`}
+            </div>
+          </div>
+        </Panel>
+      ) : (
       <div className="bookshelf-grid">
         {bookshelf.sort((a, b) => (b.progress / b.pages) - (a.progress / a.pages)).map(book => {
           const done = book.progress >= book.pages;
@@ -3672,6 +4544,7 @@ function ProfilePage() {
           );
         })}
       </div>
+      )}
 
       {/* Recent Reviews */}
       {data.reviews.filter(r => r.memberId === memberId).length > 0 && (
@@ -3692,13 +4565,56 @@ function ProfilePage() {
           })}
         </>
       )}
+
+      {/* Settings Modal */}
+      <Modal open={showSettings} onClose={() => setShowSettings(false)} title="Profile Settings">
+        <div style={{ padding: 20 }}>
+          <label className="input-label">Display Name</label>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <div style={{ flex: 1 }}>
+              <input
+                className="text-input"
+                value={editName}
+                onChange={e => { setEditName(e.target.value); setNameError(""); }}
+                placeholder="Enter display name..."
+                maxLength={16}
+                style={nameError ? { borderColor: "#C0392B" } : {}}
+              />
+              {nameError && (
+                <div style={{ color: "#C0392B", fontSize: 11, marginTop: 4 }}>{nameError}</div>
+              )}
+              <div style={{ color: "#4A4235", fontSize: 11, marginTop: 4 }}>
+                {editName.length}/16 — Letters, numbers, and underscores only
+              </div>
+            </div>
+          </div>
+
+          {/* Preview */}
+          <div style={{ marginTop: 16, padding: 12, background: "var(--bg-deep)", borderRadius: 6, border: "1px solid var(--border-subtle)" }}>
+            <div style={{ color: "#4A4235", fontSize: 10, letterSpacing: 1.5, fontFamily: "'Rajdhani', sans-serif", fontWeight: 600, marginBottom: 6 }}>PREVIEW</div>
+            <div style={{ fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: 20, color: "#E8E0D0", letterSpacing: 1 }}>
+              {editName.trim() || displayName}<span style={{ color: "#4A4235" }}>#</span><span style={{ color: "#D4AF37" }}>{displayTag}</span>
+            </div>
+          </div>
+
+          <button className="gold-btn" style={{ marginTop: 16, width: "100%" }} onClick={saveName}>
+            <Check size={14} /> Save Changes
+          </button>
+
+          <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid var(--border-subtle)" }}>
+            <button
+              className="decline-btn"
+              style={{ width: "100%", padding: "10px 16px", gap: 8, color: "#C0392B", borderColor: "#C0392B33", justifyContent: "center" }}
+              onClick={() => { setShowSettings(false); logout(); }}
+            >
+              <ArrowLeft size={14} /> Sign Out
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
-
-// ════════════════════════════════════════
-// MAIN APP
-// ════════════════════════════════════════
 const STYLES = `
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Jost:wght@300;400;500;600;700&display=swap');
 
@@ -3750,6 +4666,21 @@ body, #root {
 }
 
 .app-shell { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100vh; }
+
+/* Toast Notifications */
+.toast {
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+  z-index: 10000; display: flex; align-items: center; gap: 8px;
+  padding: 10px 20px; border-radius: 6px; font-size: 13px; font-weight: 500;
+  font-family: 'Jost', sans-serif; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  animation: toastIn 0.3s ease, toastOut 0.3s ease 2.7s both;
+  pointer-events: none; max-width: 90vw;
+}
+.toast-success { background: #1a2e1a; border: 1px solid #27AE6044; color: #27AE60; }
+.toast-error { background: #2e1a1a; border: 1px solid #C0392B44; color: #C0392B; }
+.toast-info { background: #1a1e2e; border: 1px solid #2B9EB344; color: #2B9EB3; }
+@keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(-12px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+@keyframes toastOut { from { opacity: 1; } to { opacity: 0; transform: translateX(-50%) translateY(-8px); } }
 
 /* ═══ LOGIN ═══ */
 .login-screen {
@@ -3907,19 +4838,6 @@ body, #root {
 textarea.text-input { resize: vertical; }
 select.text-input { cursor: pointer; }
 
-/* Tab bar */
-.tab-bar { display: flex; gap: 2px; margin-bottom: 16px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; -ms-overflow-style: none; }
-.tab-bar::-webkit-scrollbar { display: none; }
-.tab-btn {
-  background: none; border: none; border-bottom: 2px solid transparent;
-  color: var(--text-muted); padding: 10px 16px; cursor: pointer;
-  font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 600;
-  letter-spacing: 1px; text-transform: uppercase; transition: all 0.2s;
-  display: flex; align-items: center; white-space: nowrap;
-}
-.tab-btn:hover { color: var(--text-secondary); }
-.tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
-
 /* Modal */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
@@ -4007,14 +4925,6 @@ select.text-input { cursor: pointer; }
   width: 22px; height: 22px; border: 2px solid var(--border-medium); border-radius: 4px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--bg-deep);
 }
-.triumph-check.checked { }
-
-.leaderboard { display: flex; flex-direction: column; }
-.leaderboard-row {
-  display: flex; align-items: center; gap: 12px; padding: 12px 0;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.leaderboard-row:last-child { border-bottom: none; }
 .mini-seal {
   font-family: 'Rajdhani', sans-serif; font-size: 11px; font-weight: 700;
   letter-spacing: 1px; text-transform: uppercase; padding: 3px 8px;
@@ -4163,7 +5073,6 @@ select.text-input { cursor: pointer; }
 
 /* ═══ REVIEWS ═══ */
 .reviews-list { display: flex; flex-direction: column; gap: 16px; }
-.review-card { }
 .review-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .review-date { color: var(--text-faint); font-size: 12px; }
 .review-book-info { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px; background: var(--bg-deep); border-radius: 4px; }
@@ -4183,8 +5092,6 @@ select.text-input { cursor: pointer; }
 .thread-meta { display: flex; justify-content: space-between; align-items: center; }
 
 .thread-header-detail { padding: 4px 0; }
-.thread-posts { }
-.post-card { }
 .post-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .post-date { color: var(--text-faint); font-size: 12px; }
 .post-body { color: var(--text-secondary); font-size: 14px; line-height: 1.7; }
@@ -4205,14 +5112,27 @@ select.text-input { cursor: pointer; }
   border: 2px solid var(--border-medium); display: flex; align-items: center; justify-content: center;
   font-family: 'Rajdhani', sans-serif; font-weight: 700; color: var(--gold); font-size: 22px;
 }
-.member-light-level {
-  display: flex; align-items: center; gap: 4px; color: var(--gold);
-  font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 1px;
-}
 .member-stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; width: 100%; }
 .member-stat { text-align: center; }
 .stat-num { display: block; font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 20px; color: var(--text-primary); }
 .stat-lbl { font-size: 10px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 1px; }
+
+/* ═══ FRIEND SYSTEM ═══ */
+.friend-search-result {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; background: var(--bg-deep); border: 1px solid var(--border-subtle);
+  border-radius: 6px; transition: all 0.2s;
+}
+.friend-search-result:hover { border-color: var(--border-medium); background: var(--bg-elevated); }
+.remove-friend-btn {
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 8px; padding: 4px 10px;
+  background: transparent; border: 1px solid transparent;
+  border-radius: 3px; color: var(--text-faint);
+  font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 600;
+  letter-spacing: 1px; text-transform: uppercase; cursor: pointer; transition: all 0.2s;
+}
+.remove-friend-btn:hover { color: var(--red); border-color: rgba(192,57,43,0.3); background: rgba(192,57,43,0.06); }
 
 /* ═══ PROFILE ═══ */
 .profile-header-card {
@@ -4231,10 +5151,6 @@ select.text-input { cursor: pointer; }
 .p-stat-num { display: block; font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 24px; color: var(--text-primary); }
 .p-stat-lbl { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
 
-.profile-seal-badge {
-  display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 14px 18px;
-}
-.profile-seal-badge:hover { transform: translateY(-1px); }
 .equipped-badge {
   font-family: 'Rajdhani', sans-serif; font-size: 10px; font-weight: 700;
   color: var(--gold); letter-spacing: 2px; margin-left: auto;
@@ -4624,14 +5540,12 @@ select.text-input { cursor: pointer; }
   .bookshelf-grid { grid-template-columns: 1fr; }
   .profile-prestige-top { flex-direction: column; align-items: center; text-align: center; gap: 12px; }
   .profile-prestige-stars { justify-content: center; }
-  .profile-seal-badge { flex-direction: column; align-items: center; text-align: center; }
 
   /* ═══ TRIUMPHS ═══ */
   .seal-header { gap: 10px; }
   .seal-icon-wrap { width: 44px; height: 44px; }
   .seal-name { font-size: 16px; }
   .triumph-row { gap: 8px; }
-  .leaderboard-row { gap: 8px; padding: 10px 0; }
 
   /* ═══ DIRECTOR ═══ */
   .director-page { overflow-x: hidden; }
@@ -4666,8 +5580,6 @@ select.text-input { cursor: pointer; }
   .text-input, .text-area { font-size: 16px; }
   .gold-btn { padding: 10px 16px; font-size: 12px; }
   .filter-btn { padding: 6px 10px; font-size: 11px; }
-  .tab-bar { gap: 0; }
-  .tab-btn { padding: 10px 12px; font-size: 11px; }
 
   /* ═══ MISC ═══ */
   .diamond-divider { margin: 8px 0; }
@@ -4721,6 +5633,14 @@ export default function App() {
   const [profileTarget, setProfileTarget] = useState(null);
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [toast, setToast] = useState(null);
+  const toastTimeout = React.useRef(null);
+
+  function showToast(message, type = "success") {
+    if (toastTimeout.current) clearTimeout(toastTimeout.current);
+    setToast({ message, type, id: Date.now() });
+    toastTimeout.current = setTimeout(() => setToast(null), 3000);
+  }
 
   useEffect(() => {
     async function load() {
@@ -4786,7 +5706,8 @@ export default function App() {
             {MEMBERS.map(m => (
               <button key={m.id} className="login-btn" onClick={() => login(m)}>
                 <div className="avatar">{m.avatar}</div>
-                {m.name}
+                <span>{m.name}</span>
+                <span style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 10, color: "#4A4235", letterSpacing: 0.5 }}>#{m.tag}</span>
               </button>
             ))}
           </div>
@@ -4806,7 +5727,7 @@ export default function App() {
   ];
 
   const isAdmin = currentUser?.admin === true;
-  const ctx = { data, setData, currentUser, page, setPage, profileTarget, setProfileTarget, isAdmin };
+  const ctx = { data, setData, currentUser, page, setPage, profileTarget, setProfileTarget, isAdmin, showToast, logout };
 
   function navTo(id) {
     setPage(id);
@@ -4817,6 +5738,14 @@ export default function App() {
   return (
     <AppContext.Provider value={ctx}>
       <style>{STYLES}</style>
+      {toast && (
+        <div className={`toast toast-${toast.type}`} key={toast.id}>
+          {toast.type === "success" && <Check size={14} />}
+          {toast.type === "error" && <X size={14} />}
+          {toast.type === "info" && <Zap size={14} />}
+          <span>{toast.message}</span>
+        </div>
+      )}
       <div className="app-shell">
         <header className="header">
           <div className="header-inner">
@@ -4833,7 +5762,7 @@ export default function App() {
               ))}
             </nav>
             <div className="header-user" onClick={() => { setProfileTarget(currentUser.id); setPage("profile"); setMobileMenuOpen(false); }}>
-              <span className="header-user-name">{currentUser.name}</span>
+              <span className="header-user-name">{data.displayNames?.[currentUser.id] || currentUser.name}</span>
               {(data.prestigeLevel?.[currentUser.id] || 0) > 0 && (
                 <PrestigeEmblem level={data.prestigeLevel[currentUser.id]} size={22} />
               )}
@@ -4851,7 +5780,7 @@ export default function App() {
           <div className="mobile-menu-user" onClick={() => { setProfileTarget(currentUser.id); setPage("profile"); setMobileMenuOpen(false); }}>
             <div className="avatar" style={{ width: 40, height: 40, fontSize: 14 }}>{currentUser.avatar}</div>
             <div>
-              <div style={{ fontWeight: 700, color: "#E8E0D0", fontSize: 15 }}>{currentUser.name}</div>
+              <div style={{ fontWeight: 700, color: "#E8E0D0", fontSize: 15 }}>{data.displayNames?.[currentUser.id] || currentUser.name}</div>
               {(data.prestigeLevel?.[currentUser.id] || 0) > 0 && (
                 <div style={{ marginTop: 4 }}><PrestigeEmblem level={data.prestigeLevel[currentUser.id]} size={20} showLabel /></div>
               )}
