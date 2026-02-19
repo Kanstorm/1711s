@@ -42,25 +42,25 @@ const FORUM_CATEGORIES = [
 ];
 
 const SEED_BOOKS = [
-  { id: "b1", title: "1689 Baptist Confession of Faith", author: "Various", category: "Confessional Studies", pages: 120, cover: "📜" },
-  { id: "b2", title: "Pilgrim's Progress", author: "John Bunyan", category: "Devotional", pages: 336, cover: "🏔️" },
-  { id: "b3", title: "Holiness", author: "J.C. Ryle", category: "Devotional", pages: 288, cover: "✝️" },
-  { id: "b4", title: "Knowing God", author: "J.I. Packer", category: "Systematic Theology", pages: 286, cover: "🕊️" },
-  { id: "b5", title: "Institutes of the Christian Religion", author: "John Calvin", category: "Systematic Theology", pages: 1521, cover: "📖" },
-  { id: "b6", title: "The Existence and Attributes of God", author: "Stephen Charnock", category: "Theology Proper", pages: 1072, cover: "⚡" },
-  { id: "b7", title: "Morning & Evening", author: "C.H. Spurgeon", category: "Devotional", pages: 732, cover: "🌅" },
-  { id: "b8", title: "The Doctrine of Repentance", author: "Thomas Watson", category: "Systematic Theology", pages: 128, cover: "💧" },
-  { id: "b9", title: "The Reformed Pastor", author: "Richard Baxter", category: "Pastoral", pages: 256, cover: "🐑" },
-  { id: "b10", title: "Desiring God", author: "John Piper", category: "Devotional", pages: 368, cover: "🔥" },
-  { id: "b11", title: "Mere Christianity", author: "C.S. Lewis", category: "Apologetics", pages: 227, cover: "🦁" },
-  { id: "b12", title: "The Mortification of Sin", author: "John Owen", category: "Systematic Theology", pages: 144, cover: "⚔️" },
+  { id: "b1", title: "1689 Baptist Confession of Faith", author: "Various", category: "Confessional Studies", pages: 120, cover: "", coverUrl: "https://covers.openlibrary.org/b/id/8231856-M.jpg" },
+  { id: "b2", title: "Pilgrim's Progress", author: "John Bunyan", category: "Devotional", pages: 336, cover: "", coverUrl: "https://covers.openlibrary.org/b/id/14348220-M.jpg" },
+  { id: "b3", title: "Holiness", author: "J.C. Ryle", category: "Devotional", pages: 288, cover: "", coverUrl: "https://covers.openlibrary.org/b/id/8091498-M.jpg" },
+  { id: "b4", title: "Knowing God", author: "J.I. Packer", category: "Systematic Theology", pages: 286, cover: "", coverUrl: "https://covers.openlibrary.org/b/id/240726-M.jpg" },
+  { id: "b5", title: "Institutes of the Christian Religion", author: "John Calvin", category: "Systematic Theology", pages: 1521, cover: "", coverUrl: "https://covers.openlibrary.org/b/id/12818414-M.jpg" },
+  { id: "b6", title: "The Existence and Attributes of God", author: "Stephen Charnock", category: "Theology Proper", pages: 1072, cover: "", coverUrl: "https://covers.openlibrary.org/b/id/940138-M.jpg" },
+  { id: "b7", title: "Morning & Evening", author: "C.H. Spurgeon", category: "Devotional", pages: 732, cover: "", coverUrl: "https://covers.openlibrary.org/b/id/417681-M.jpg" },
+  { id: "b8", title: "The Doctrine of Repentance", author: "Thomas Watson", category: "Systematic Theology", pages: 128, cover: "", coverUrl: "https://covers.openlibrary.org/b/id/6880674-M.jpg" },
+  { id: "b9", title: "The Reformed Pastor", author: "Richard Baxter", category: "Pastoral", pages: 256, cover: "", coverUrl: "https://covers.openlibrary.org/b/id/7894651-M.jpg" },
+  { id: "b10", title: "Desiring God", author: "John Piper", category: "Devotional", pages: 368, cover: "", coverUrl: "https://covers.openlibrary.org/b/id/569407-M.jpg" },
+  { id: "b11", title: "Mere Christianity", author: "C.S. Lewis", category: "Apologetics", pages: 227, cover: "", coverUrl: "https://covers.openlibrary.org/b/id/14345889-M.jpg" },
+  { id: "b12", title: "The Mortification of Sin", author: "John Owen", category: "Systematic Theology", pages: 144, cover: "", coverUrl: "https://covers.openlibrary.org/b/id/6880675-M.jpg" },
 ];
 
 const SEAL_DEFINITIONS = [
   {
     id: "seal-berean", name: "Berean", subtitle: "Acts 17:11",
     description: "Examine the Scriptures daily with noble purpose.",
-    icon: "📖", color: "#D4AF37",
+    icon: "✦", color: "#D4AF37",
     triumphs: [
       { id: "t1", name: "Voracious Reader", desc: "Read 5 books", type: "books_read", target: 5 },
       { id: "t2", name: "Thoughtful Critic", desc: "Write 3 reviews", type: "reviews_written", target: 3 },
@@ -81,7 +81,7 @@ const SEAL_DEFINITIONS = [
   {
     id: "seal-apologist", name: "Apologist", subtitle: "1 Peter 3:15",
     description: "Always be prepared to give a defense for the hope that is in you.",
-    icon: "🛡️", color: "#2980B9",
+    icon: "◆", color: "#2980B9",
     triumphs: [
       { id: "t8", name: "Defender's Library", desc: "Read 2 apologetics books", type: "apologetics_books", target: 2 },
       { id: "t9", name: "Hard Questions", desc: "Start a discussion on a hard theological question", type: "hard_question", target: 1 },
@@ -91,7 +91,7 @@ const SEAL_DEFINITIONS = [
   {
     id: "seal-confessor", name: "Confessor", subtitle: "1689 LBCF",
     description: "Know and confess the faith once delivered to the saints.",
-    icon: "📜", color: "#8E44AD",
+    icon: "※", color: "#8E44AD",
     triumphs: [
       { id: "t11", name: "Confession Complete", desc: "Read the entire 1689 LBCF", type: "lbcf_read", target: 1 },
       { id: "t12", name: "Confessional Scholar", desc: "Discuss 5 chapters in the forum", type: "lbcf_discussions", target: 5 },
@@ -101,7 +101,7 @@ const SEAL_DEFINITIONS = [
   {
     id: "seal-theologian", name: "Theologian", subtitle: "2 Timothy 2:15",
     description: "A workman who need not be ashamed.",
-    icon: "🏛️", color: "#F39C12",
+    icon: "∞", color: "#F39C12",
     triumphs: [
       { id: "t14", name: "Triple Sealed", desc: "Complete 3 other seals", type: "seals_complete", target: 3 },
     ]
@@ -109,7 +109,7 @@ const SEAL_DEFINITIONS = [
   {
     id: "seal-shepherd", name: "Shepherd", subtitle: "1 Peter 5:2",
     description: "Feed the flock of God which is among you.",
-    icon: "🐑", color: "#27AE60",
+    icon: "†", color: "#27AE60",
     triumphs: [
       { id: "t15", name: "Thread Weaver", desc: "Start 10 discussion threads", type: "threads_10", target: 10 },
       { id: "t16", name: "Faithful Responder", desc: "Reply to 20 threads", type: "replies_20", target: 20 },
@@ -407,18 +407,30 @@ async function fetchBookCover(title, author) {
 }
 
 function BookCover({ book, size = 36 }) {
+  const w = size * 0.85;
+  const h = size * 1.25;
+  const initials = (book.title || "").split(" ").filter(w => w.length > 2).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "B";
   if (book.coverUrl) {
     return (
-      <img
-        src={book.coverUrl}
-        alt={book.title}
-        className="book-cover-img"
-        style={{ width: size * 0.85, height: size * 1.25, objectFit: "cover", borderRadius: 3, flexShrink: 0 }}
-        onError={e => { e.target.style.display = "none"; e.target.nextSibling.style.display = "inline"; }}
-      />
+      <span style={{ display: "inline-block", position: "relative", flexShrink: 0 }}>
+        <img
+          src={book.coverUrl}
+          alt={book.title}
+          className="book-cover-img"
+          style={{ width: w, height: h, objectFit: "cover", borderRadius: 3, display: "block" }}
+          onError={e => { e.target.style.display = "none"; if (e.target.nextSibling) e.target.nextSibling.style.display = "flex"; }}
+        />
+        <div className="book-cover-placeholder" style={{ width: w, height: h, fontSize: Math.max(9, size * 0.22), display: "none" }}>
+          {initials}
+        </div>
+      </span>
     );
   }
-  return <span style={{ fontSize: size, flexShrink: 0 }}>{book.cover || "📘"}</span>;
+  return (
+    <div className="book-cover-placeholder" style={{ width: w, height: h, fontSize: Math.max(9, size * 0.22) }}>
+      {initials}
+    </div>
+  );
 }
 
 function DiamondDivider() {
@@ -520,7 +532,7 @@ function HomePage() {
       activities: [...d.activities, {
         id: `a${Date.now()}`, type: "invite_accept", memberId: currentUser.id,
         text: `joined a group read of "${data.books.find(b => b.id === (d.readInvites || []).find(i => i.id === inviteId)?.bookId)?.title}"`,
-        date: new Date().toISOString().split("T")[0], icon: "🤝",
+        date: new Date().toISOString().split("T")[0], icon: "»",
       }],
     }));
   }
@@ -688,7 +700,7 @@ function HomePage() {
               const member = MEMBERS.find(m => m.id === rec.memberId);
               return (
                 <Panel key={rec.id} className="rec-card">
-                  <div className="rec-book-cover">{book ? <BookCover book={book} size={36} /> : "📘"}</div>
+                  <div className="rec-book-cover">{book ? <BookCover book={book} size={36} /> : "?"}</div>
                   <div>
                     <div style={{ fontWeight: 600, color: "#E8E0D0", fontSize: 14 }}>{book?.title}</div>
                     <div style={{ color: "#8A7E6B", fontSize: 12 }}>{book?.author}</div>
@@ -861,7 +873,7 @@ function LibraryPage() {
 
   function addBook() {
     if (!newBook.title || !newBook.author || !newBook.pages) return;
-    const book = { ...newBook, id: `b${Date.now()}`, pages: parseInt(newBook.pages), cover: "📘", coverUrl: newBook.coverUrl || "" };
+    const book = { ...newBook, id: `b${Date.now()}`, pages: parseInt(newBook.pages), cover: "", coverUrl: newBook.coverUrl || "" };
     setData(d => ({ ...d, books: [...d.books, book] }));
     setNewBook({ title: "", author: "", category: CATEGORIES[0], pages: "", coverUrl: "" });
     setCoverLoading(false);
@@ -920,7 +932,7 @@ function LibraryPage() {
       activities: [...d.activities, {
         id: `a${Date.now()}`, type: "invite", memberId: currentUser.id,
         text: `invited ${inviteMembers.map(id => MEMBERS.find(m => m.id === id)?.name).join(", ")} to read "${selectedBook.title}"`,
-        date: invite.date, icon: "📨",
+        date: invite.date, icon: "↗",
       }],
     }));
     setShowInvite(false);
@@ -1368,7 +1380,9 @@ function LibraryPage() {
               {newBook.coverUrl ? (
                 <img src={newBook.coverUrl} alt="Cover" style={{ width: 60, height: 90, objectFit: "cover", borderRadius: 4 }} />
               ) : (
-                <div style={{ width: 60, height: 90, background: "var(--bg-deep)", border: "1px solid var(--border-subtle)", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", color: "#4A4235", fontSize: 28 }}>📘</div>
+                <div className="book-cover-placeholder" style={{ width: 60, height: 90, fontSize: 14 }}>
+                  {(newBook.title || "").split(" ").filter(w => w.length > 2).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "?"}
+                </div>
               )}
             </div>
             <div style={{ flex: 1 }}>
@@ -1471,7 +1485,7 @@ function ReviewsPage() {
                 <span className="review-date">{review.date}</span>
               </div>
               <div className="review-book-info">
-                <span style={{ fontSize: 20, marginRight: 8 }}>{book ? <BookCover book={book} size={20} /> : "📘"}</span>
+                <span style={{ fontSize: 20, marginRight: 8 }}>{book ? <BookCover book={book} size={20} /> : "?"}</span>
                 <div>
                   <div style={{ fontWeight: 600, color: "#E8E0D0" }}>{book?.title}</div>
                   <div style={{ color: "#6B6152", fontSize: 12 }}>{book?.author}</div>
@@ -1886,7 +1900,7 @@ function DirectorPage() {
       activities: [...d.activities, {
         id: `a${Date.now()}`, type: "prestige", memberId: currentUser.id,
         text: `achieved Prestige ${(d.prestigeLevel?.[currentUser.id] || 0) + 1} — read through the entire Bible!`,
-        date: new Date().toISOString().split("T")[0], icon: "🌟",
+        date: new Date().toISOString().split("T")[0], icon: "★",
       }],
     }));
     setShowPrestigeConfirm(false);
@@ -2079,7 +2093,7 @@ function DirectorPage() {
           <Panel className="illumination-card" glow={otStats.pct > 0 ? "#D4AF37" : undefined}
             onClick={() => { setTab("OT"); setSelectedBook(null); }}>
             <div className="illumination-card-header">
-              <span className="illumination-card-icon">📜</span>
+              <span className="illumination-card-icon" style={{ color: "#D4AF37", fontFamily: "'Rajdhani', sans-serif", fontWeight: 800 }}>OT</span>
               <div>
                 <div className="illumination-card-title">Old Testament</div>
                 <div className="illumination-card-sub">{otStats.totalBooks} books · {otStats.totalCh} chapters</div>
@@ -2105,7 +2119,7 @@ function DirectorPage() {
           <Panel className="illumination-card" glow={ntStats.pct > 0 ? "#2B9EB3" : undefined}
             onClick={() => { setTab("NT"); setSelectedBook(null); }}>
             <div className="illumination-card-header">
-              <span className="illumination-card-icon">✝️</span>
+              <span className="illumination-card-icon" style={{ color: "#2B9EB3", fontFamily: "'Rajdhani', sans-serif", fontWeight: 800 }}>NT</span>
               <div>
                 <div className="illumination-card-title">New Testament</div>
                 <div className="illumination-card-sub">{ntStats.totalBooks} books · {ntStats.totalCh} chapters</div>
@@ -2551,7 +2565,7 @@ function ProfilePage() {
             return (
               <Panel key={r.id} style={{ marginBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <span>{book ? <BookCover book={book} size={20} /> : "📘"}</span>
+                  <span>{book ? <BookCover book={book} size={20} /> : "?"}</span>
                   <span style={{ fontWeight: 600, color: "#E8E0D0" }}>{book?.title}</span>
                   <div style={{ marginLeft: "auto" }}><StarRating rating={r.rating} size={12} /></div>
                 </div>
@@ -2896,6 +2910,12 @@ select.text-input { cursor: pointer; }
 .book-card:hover { transform: translateY(-2px); }
 .book-complete { background: linear-gradient(135deg, rgba(39,174,96,0.06), var(--panel-bg)); }
 .book-cover-emoji { font-size: 36px; flex-shrink: 0; }
+.book-cover-img { display: block; flex-shrink: 0; }
+.book-cover-placeholder {
+  flex-shrink: 0; border-radius: 3px; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(145deg, #1E1B18, #2A2520); border: 1px solid var(--border-subtle);
+  color: #6B6152; font-family: 'Rajdhani', sans-serif; font-weight: 700; letter-spacing: 1px;
+}
 .book-info { flex: 1; min-width: 0; }
 .book-title { font-weight: 700; color: var(--text-primary); font-size: 14px; line-height: 1.3; }
 .book-author { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
@@ -3476,19 +3496,19 @@ export default function App() {
   useEffect(() => {
     async function load() {
       try {
-        const stored = await window.storage.get("app-data-1711s-v8");
+        const stored = await window.storage.get("app-data-1711s-v9");
         if (stored) {
           setData(JSON.parse(stored.value));
         } else {
           const seed = getSeedData();
           setData(seed);
-          await window.storage.set("app-data-1711s-v8", JSON.stringify(seed));
+          await window.storage.set("app-data-1711s-v9", JSON.stringify(seed));
         }
       } catch {
         setData(getSeedData());
       }
       try {
-        const user = await window.storage.get("current-user-1711s-v8");
+        const user = await window.storage.get("current-user-1711s-v9");
         if (user) setCurrentUser(JSON.parse(user.value));
       } catch {}
       setLoading(false);
@@ -3498,18 +3518,18 @@ export default function App() {
 
   useEffect(() => {
     if (data) {
-      window.storage.set("app-data-1711s-v8", JSON.stringify(data)).catch(() => {});
+      window.storage.set("app-data-1711s-v9", JSON.stringify(data)).catch(() => {});
     }
   }, [data]);
 
   async function login(member) {
     setCurrentUser(member);
-    await window.storage.set("current-user-1711s-v8", JSON.stringify(member)).catch(() => {});
+    await window.storage.set("current-user-1711s-v9", JSON.stringify(member)).catch(() => {});
   }
 
   function logout() {
     setCurrentUser(null);
-    window.storage.delete("current-user-1711s-v8").catch(() => {});
+    window.storage.delete("current-user-1711s-v9").catch(() => {});
   }
 
   if (loading) {
