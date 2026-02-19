@@ -1372,7 +1372,7 @@ function ReviewsPage() {
           <button key={c} className={`filter-btn ${filterCat === c ? "active" : ""}`} onClick={() => setFilterCat(c)}>{c}</button>
         ))}
       </div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
         <button className={`filter-btn ${filterRating === 0 ? "active" : ""}`} onClick={() => setFilterRating(0)}>All Ratings</button>
         {[5, 4, 3, 2, 1].map(r => (
           <button key={r} className={`filter-btn ${filterRating === r ? "active" : ""}`} onClick={() => setFilterRating(r)}>
@@ -1877,7 +1877,7 @@ function DirectorPage() {
           Chart your course through Scripture — every chapter, every book
         </p>
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
           <button className={`director-toggle active`} onClick={() => {}}>Illumination</button>
           <button className="director-toggle" onClick={() => { setTab("OT"); setSelectedBook(null); }}>Old Testament</button>
           <button className="director-toggle" onClick={() => { setTab("NT"); setSelectedBook(null); }}>New Testament</button>
@@ -2177,7 +2177,7 @@ function DirectorPage() {
         Chart your course through Scripture — every chapter, every book
       </p>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
         <button className="director-toggle" onClick={() => { setTab("illumination"); setSelectedBook(null); }}>Illumination</button>
         <button className={`director-toggle ${testament === "OT" ? "active" : ""}`} onClick={() => { setTab("OT"); setSelectedBook(null); }}>Old Testament</button>
         <button className={`director-toggle ${testament === "NT" ? "active" : ""}`} onClick={() => { setTab("NT"); setSelectedBook(null); }}>New Testament</button>
@@ -2514,7 +2514,7 @@ const STYLES = `
   --panel-border: rgba(42, 37, 32, 0.8);
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
 body, #root {
   font-family: 'Jost', sans-serif;
@@ -2522,6 +2522,7 @@ body, #root {
   color: var(--text-primary);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 /* Subtle background pattern */
@@ -2572,7 +2573,8 @@ body, #root {
   letter-spacing: 3px; text-shadow: 0 0 20px var(--gold-glow);
   margin-right: 32px; cursor: pointer; flex-shrink: 0;
 }
-.nav { display: flex; gap: 2px; overflow-x: auto; flex: 1; }
+.nav { display: flex; gap: 2px; overflow-x: auto; flex: 1; -webkit-overflow-scrolling: touch; scrollbar-width: none; -ms-overflow-style: none; }
+.nav::-webkit-scrollbar { display: none; }
 .nav-btn {
   background: none; border: none; color: var(--text-muted); font-family: 'Rajdhani', sans-serif;
   font-size: 13px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase;
@@ -2696,7 +2698,8 @@ textarea.text-input { resize: vertical; }
 select.text-input { cursor: pointer; }
 
 /* Tab bar */
-.tab-bar { display: flex; gap: 2px; margin-bottom: 16px; overflow-x: auto; }
+.tab-bar { display: flex; gap: 2px; margin-bottom: 16px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; -ms-overflow-style: none; }
+.tab-bar::-webkit-scrollbar { display: none; }
 .tab-btn {
   background: none; border: none; border-bottom: 2px solid transparent;
   color: var(--text-muted); padding: 10px 16px; cursor: pointer;
@@ -3181,25 +3184,157 @@ select.text-input { cursor: pointer; }
 
 /* ═══ RESPONSIVE ═══ */
 @media (max-width: 768px) {
-  .nav-btn { padding: 16px 10px; font-size: 11px; }
-  .home-grid { grid-template-columns: 1fr; }
-  .challenge-card, .activity-card { grid-column: span 1; }
-  .members-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
-  .book-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
-  .profile-stats-row { gap: 12px; }
+  /* ═══ HEADER & NAV ═══ */
+  .header { padding: 0 12px; }
+  .header-inner { height: 52px; }
+  .logo { font-size: 24px; margin-right: 12px; letter-spacing: 2px; }
+  .nav { gap: 0; -webkit-overflow-scrolling: touch; }
+  .nav-btn { padding: 16px 10px; font-size: 10px; letter-spacing: 0.8px; gap: 4px; }
+  .nav-btn svg { display: none; }
+  .header-user { gap: 6px; padding-left: 8px; }
   .header-user-name { display: none; }
-  .page-content { padding: 16px; }
-  .login-logo { font-size: 48px; }
+
+  /* ═══ PAGE CONTENT ═══ */
+  .page-content { padding: 16px 12px; }
+  .page-header h2 { font-size: 20px; }
+  .section-title { font-size: 10px; }
+
+  /* ═══ LOGIN ═══ */
+  .login-logo { font-size: 48px; letter-spacing: 4px; }
+  .login-tagline { font-size: 11px; margin-bottom: 32px; }
+  .login-grid { grid-template-columns: 1fr; gap: 8px; max-width: 320px; }
+  .login-btn { padding: 12px 16px; }
+
+  /* ═══ HOME PAGE ═══ */
+  .home-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .challenge-card, .activity-card { grid-column: span 2; }
+  .stat-card { padding: 16px 10px; }
+  .stat-value { font-size: 28px; }
+  .stat-label { font-size: 10px; }
+  .daily-verse-text { font-size: 15px; }
+  .rec-grid { grid-template-columns: 1fr; }
+  .activity-item { gap: 8px; }
+  .activity-text { font-size: 12px; }
+
+  /* ═══ LIBRARY ═══ */
+  .book-grid { grid-template-columns: 1fr; gap: 10px; }
+  .book-card { gap: 10px; }
+  .book-cover-emoji { font-size: 28px; }
+  .book-title { font-size: 13px; }
+
+  /* ═══ GROUP READS ═══ */
+  .group-reads-grid { grid-template-columns: 1fr; gap: 10px; }
+  .invite-cards-grid { grid-template-columns: 1fr; gap: 10px; }
+  .gr-participants-row { grid-template-columns: 1fr; gap: 8px; }
+  .fireteam-members-grid { grid-template-columns: 1fr; gap: 8px; }
+  .gr-chat-messages { max-height: 360px; min-height: 180px; padding: 12px; }
+  .gr-chat-msg { max-width: 88%; }
+  .gr-chat-bubble { font-size: 13px; padding: 7px 12px; }
+  .gr-chat-input-row { padding: 10px 12px; }
+  .gr-chat-input { font-size: 13px; padding: 8px 14px; }
+
+  /* ═══ REVIEWS ═══ */
+  .review-header { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .review-text { font-size: 13px; }
+  .review-book-info { padding: 8px; gap: 6px; }
+
+  /* ═══ FORUM ═══ */
+  .thread-title { font-size: 14px; }
+  .thread-card-top { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .thread-meta { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .post-body { font-size: 13px; }
+  .post-header { flex-direction: column; align-items: flex-start; gap: 4px; }
+
+  /* ═══ MEMBERS / FIRETEAM ═══ */
+  .members-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .member-card { padding: 16px 10px; }
+  .member-avatar-lg { width: 52px; height: 52px; font-size: 18px; }
+  .member-stats-grid { gap: 6px; }
+
+  /* ═══ PROFILE ═══ */
+  .profile-top { flex-direction: column; align-items: center; text-align: center; }
+  .profile-avatar-xl { width: 64px; height: 64px; font-size: 22px; }
+  .profile-stats-row { gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .profile-stat { min-width: 60px; }
+  .p-stat-num { font-size: 20px; }
+  .bookshelf-grid { grid-template-columns: 1fr; }
+  .profile-prestige-top { flex-direction: column; align-items: center; text-align: center; gap: 12px; }
+  .profile-prestige-stars { justify-content: center; }
+  .profile-seal-badge { flex-direction: column; align-items: center; text-align: center; }
+
+  /* ═══ TRIUMPHS ═══ */
+  .seal-header { gap: 10px; }
+  .seal-icon-wrap { width: 44px; height: 44px; }
+  .seal-name { font-size: 16px; }
+  .triumph-row { gap: 8px; }
+  .leaderboard-row { gap: 8px; padding: 10px 0; }
+
+  /* ═══ DIRECTOR ═══ */
+  .director-page { overflow-x: hidden; }
   .director-layout { grid-template-columns: 1fr; }
-  .director-stats-bar { gap: 12px; }
+  .director-stats-bar { gap: 10px; padding: 12px 14px; flex-wrap: wrap; }
   .director-stats-bar .director-stat-divider { display: none; }
+  .director-stat-num { font-size: 18px; }
+  .solar-system-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .solar-svg { min-width: 500px; }
+  .solar-legend { gap: 8px 14px; }
+  .director-detail-panel { order: -1; }
+  .chapter-grid { grid-template-columns: repeat(auto-fill, minmax(34px, 1fr)); gap: 3px; }
+  .director-booklist { max-height: 300px; }
+  .director-toggle { padding: 8px 14px; font-size: 12px; letter-spacing: 1px; }
   .illumination-stats { grid-template-columns: 1fr; }
+  .illumination-card-header { gap: 10px; }
+  .illumination-card-title { font-size: 16px; }
+
+  /* ═══ PRESTIGE ═══ */
+  .prestige-header { flex-direction: column; align-items: center; text-align: center; gap: 10px; }
+  .prestige-btn { margin-left: 0; margin-top: 4px; }
+  .prestige-title { font-size: 15px; }
+  .prestige-wings-row { justify-content: center; }
+
+  /* ═══ MODALS ═══ */
+  .modal-overlay { padding: 12px; align-items: flex-end; }
+  .modal-content { max-height: 90vh; border-radius: 12px 12px 0 0; }
+  .modal-header { padding: 14px 16px; }
+  .modal-header h3 { font-size: 16px; }
+
+  /* ═══ FORMS & CONTROLS ═══ */
+  .text-input, .text-area { font-size: 16px; }
+  .gold-btn { padding: 10px 16px; font-size: 12px; }
+  .filter-btn { padding: 6px 10px; font-size: 11px; }
+  .tab-bar { gap: 0; }
+  .tab-btn { padding: 10px 12px; font-size: 11px; }
+
+  /* ═══ MISC ═══ */
+  .diamond-divider { margin: 8px 0; }
+  .glass-panel { padding: 14px; }
+  .equipped-badge { font-size: 8px; padding: 2px 5px; }
 }
 
 @media (max-width: 480px) {
-  .nav { gap: 0; }
-  .nav-btn { padding: 14px 8px; font-size: 10px; letter-spacing: 0.5px; }
-  .logo { font-size: 22px; margin-right: 12px; }
+  .logo { font-size: 20px; margin-right: 8px; letter-spacing: 1px; }
+  .nav-btn { padding: 14px 6px; font-size: 9px; letter-spacing: 0.3px; }
+  .page-content { padding: 12px 8px; }
+  .home-grid { grid-template-columns: 1fr; gap: 8px; }
+  .stat-value { font-size: 24px; }
+  .members-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .book-grid { grid-template-columns: 1fr; }
+  .solar-svg { min-width: 420px; }
+  .director-toggle { padding: 6px 10px; font-size: 11px; }
+  .prestige-point-slot { width: 24px; height: 24px; }
+  .modal-content { max-width: 100%; }
+  .profile-stats-row { gap: 4px; }
+  .p-stat-num { font-size: 18px; }
+  .profile-stat { min-width: 50px; }
+}
+
+@media (max-width: 360px) {
+  .nav-btn { padding: 12px 4px; font-size: 8px; }
+  .logo { font-size: 18px; }
+  .header-inner { height: 46px; }
+  .page-header h2 { font-size: 18px; }
+  .stat-value { font-size: 22px; }
+  .director-toggle { padding: 5px 8px; font-size: 10px; }
 }
 
 /* ═══ ANIMATIONS ═══ */
