@@ -1776,7 +1776,7 @@ function TriumphsPage() {
   }
 
   // Auto-award completed seals
-  React.useEffect(() => {
+  useEffect(() => {
     const currentCompleted = data.completedSeals?.[currentUser.id] || [];
     const newlyCompleted = [];
     allSeals.forEach(seal => {
@@ -5634,7 +5634,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [toast, setToast] = useState(null);
-  const toastTimeout = React.useRef(null);
+  const toastTimeout = useRef(null);
 
   function showToast(message, type = "success") {
     if (toastTimeout.current) clearTimeout(toastTimeout.current);
