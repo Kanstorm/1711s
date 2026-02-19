@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext } from "react";
-import { BookOpen, MessageSquare, Trophy, Users, Star, ChevronRight, ChevronDown, Send, Shield, Flame, Search, Plus, X, Check, Clock, TrendingUp, Award, Bookmark, Quote, ArrowLeft, Heart, Zap, Eye, Edit3, Hash } from "lucide-react";
-
+import { BookOpen, MessageSquare, Trophy, Users, Star, ChevronRight, ChevronDown, Send, Shield, Flame, Search, Plus, X, Check, Clock, TrendingUp, Award, Bookmark, Quote, ArrowLeft, Heart, Zap, Eye, Edit3, Hash, Menu } from "lucide-react";
 
 // Polyfill storage for browser
 if (!window.storage) {
@@ -3182,17 +3181,53 @@ select.text-input { cursor: pointer; }
 .profile-prestige-desc { color: var(--text-muted); font-size: 13px; margin-top: 6px; }
 .profile-prestige-stars { display: flex; gap: 6px; flex-wrap: wrap; }
 
+/* ═══ HAMBURGER & MOBILE MENU ═══ */
+.hamburger-btn {
+  display: none; background: none; border: none; color: var(--text-secondary);
+  cursor: pointer; padding: 8px; margin-left: 8px; flex-shrink: 0;
+}
+.mobile-menu-backdrop {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  z-index: 199;
+}
+.mobile-menu {
+  display: none; position: fixed; top: 0; right: 0; bottom: 0; width: 280px;
+  background: #141210; border-left: 1px solid var(--border-subtle);
+  z-index: 200; transform: translateX(100%); transition: transform 0.3s ease;
+  flex-direction: column; padding: 20px 0; overflow-y: auto;
+}
+.mobile-menu.open { transform: translateX(0); }
+.mobile-menu-user {
+  display: flex; align-items: center; gap: 12px; padding: 12px 20px;
+  cursor: pointer; margin-bottom: 4px;
+}
+.mobile-menu-user:hover { background: var(--bg-elevated); }
+.mobile-menu-divider { height: 1px; background: var(--border-subtle); margin: 8px 16px; }
+.mobile-menu-item {
+  display: flex; align-items: center; gap: 14px; padding: 14px 24px;
+  background: none; border: none; color: var(--text-muted); font-family: 'Rajdhani', sans-serif;
+  font-size: 15px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase;
+  cursor: pointer; transition: all 0.15s; width: 100%; text-align: left;
+}
+.mobile-menu-item:hover { background: var(--bg-elevated); color: var(--text-secondary); }
+.mobile-menu-item.active { color: var(--gold); background: rgba(212,175,55,0.06); border-right: 3px solid var(--gold); }
+.mobile-menu-item svg { flex-shrink: 0; }
+.mobile-menu-signout { color: #6B6152; font-size: 13px; }
+.mobile-menu-signout:hover { color: var(--red); }
+
 /* ═══ RESPONSIVE ═══ */
 @media (max-width: 768px) {
-  /* ═══ HEADER & NAV ═══ */
+  /* ═══ HAMBURGER MENU ═══ */
+  .nav-desktop { display: none; }
+  .hamburger-btn { display: block; }
+  .mobile-menu-backdrop { display: block; }
+  .mobile-menu { display: flex; }
+  .header-user-name { display: none; }
+
+  /* ═══ HEADER ═══ */
   .header { padding: 0 12px; }
   .header-inner { height: 52px; }
-  .logo { font-size: 24px; margin-right: 12px; letter-spacing: 2px; }
-  .nav { gap: 0; -webkit-overflow-scrolling: touch; }
-  .nav-btn { padding: 16px 10px; font-size: 10px; letter-spacing: 0.8px; gap: 4px; }
-  .nav-btn svg { display: none; }
-  .header-user { gap: 6px; padding-left: 8px; }
-  .header-user-name { display: none; }
+  .logo { font-size: 24px; margin-right: auto; letter-spacing: 2px; }
 
   /* ═══ PAGE CONTENT ═══ */
   .page-content { padding: 16px 12px; }
@@ -3356,6 +3391,7 @@ export default function App() {
   const [data, setData] = useState(null);
   const [profileTarget, setProfileTarget] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -3442,33 +3478,70 @@ export default function App() {
 
   const ctx = { data, setData, currentUser, page, setPage, profileTarget, setProfileTarget };
 
+  function navTo(id) {
+    setPage(id);
+    setProfileTarget(null);
+    setMobileMenuOpen(false);
+  }
+
   return (
     <AppContext.Provider value={ctx}>
       <style>{STYLES}</style>
       <div className="app-shell">
         <header className="header">
           <div className="header-inner">
-            <div className="logo" onClick={() => setPage("home")}>17:11s</div>
-            <nav className="nav">
+            <div className="logo" onClick={() => navTo("home")}>17:11s</div>
+            <nav className="nav nav-desktop">
               {NAV.map(n => (
                 <button
                   key={n.id}
                   className={`nav-btn ${page === n.id ? "active" : ""}`}
-                  onClick={() => { setPage(n.id); setProfileTarget(null); }}
+                  onClick={() => navTo(n.id)}
                 >
                   {n.icon} {n.label}
                 </button>
               ))}
             </nav>
-            <div className="header-user" onClick={() => { setProfileTarget(currentUser.id); setPage("profile"); }}>
+            <div className="header-user" onClick={() => { setProfileTarget(currentUser.id); setPage("profile"); setMobileMenuOpen(false); }}>
               <span className="header-user-name">{currentUser.name}</span>
               {(data.prestigeLevel?.[currentUser.id] || 0) > 0 && (
                 <PrestigeEmblem level={data.prestigeLevel[currentUser.id]} size={22} />
               )}
               <div className="avatar" style={{ width: 32, height: 32, fontSize: 11 }}>{currentUser.avatar}</div>
             </div>
+            <button className="hamburger-btn" onClick={() => setMobileMenuOpen(o => !o)}>
+              {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
           </div>
         </header>
+
+        {/* Mobile slide-out menu */}
+        {mobileMenuOpen && <div className="mobile-menu-backdrop" onClick={() => setMobileMenuOpen(false)} />}
+        <div className={`mobile-menu ${mobileMenuOpen ? "open" : ""}`}>
+          <div className="mobile-menu-user" onClick={() => { setProfileTarget(currentUser.id); setPage("profile"); setMobileMenuOpen(false); }}>
+            <div className="avatar" style={{ width: 40, height: 40, fontSize: 14 }}>{currentUser.avatar}</div>
+            <div>
+              <div style={{ fontWeight: 700, color: "#E8E0D0", fontSize: 15 }}>{currentUser.name}</div>
+              {(data.prestigeLevel?.[currentUser.id] || 0) > 0 && (
+                <div style={{ marginTop: 4 }}><PrestigeEmblem level={data.prestigeLevel[currentUser.id]} size={20} showLabel /></div>
+              )}
+            </div>
+          </div>
+          <div className="mobile-menu-divider" />
+          {NAV.map(n => (
+            <button
+              key={n.id}
+              className={`mobile-menu-item ${page === n.id ? "active" : ""}`}
+              onClick={() => navTo(n.id)}
+            >
+              {n.icon} <span>{n.label}</span>
+            </button>
+          ))}
+          <div className="mobile-menu-divider" />
+          <button className="mobile-menu-item mobile-menu-signout" onClick={() => { logout(); setMobileMenuOpen(false); }}>
+            <ArrowLeft size={14} /> <span>Sign Out</span>
+          </button>
+        </div>
 
         <main style={{ flex: 1 }}>
           {page === "home" && <HomePage />}
