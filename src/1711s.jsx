@@ -1,25 +1,30 @@
 import { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext } from "react";
 import { BookOpen, MessageSquare, Trophy, Users, Star, ChevronRight, ChevronDown, Send, Shield, Flame, Search, Plus, X, Check, Clock, TrendingUp, Award, Bookmark, Quote, ArrowLeft, Heart, Zap, Eye, Edit3, Hash, Menu } from "lucide-react";
 
-// Polyfill storage for browser
+// Polyfill storage for browser (in-memory fallback if localStorage unavailable)
 if (!window.storage) {
+  const _memStore = {};
   window.storage = {
     async get(key) {
-      const value = localStorage.getItem(key);
-      return value ? { value } : null;
+      try {
+        const value = localStorage.getItem(key);
+        return value ? { value } : null;
+      } catch {
+        return _memStore[key] ? { value: _memStore[key] } : null;
+      }
     },
     async set(key, value) {
-      localStorage.setItem(key, value);
+      try { localStorage.setItem(key, value); } catch { _memStore[key] = value; }
     },
     async delete(key) {
-      localStorage.removeItem(key);
+      try { localStorage.removeItem(key); } catch { delete _memStore[key]; }
     }
   };
 }
 
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 // CONTEXT & DATA LAYER
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 const AppContext = createContext(null);
 
 const MEMBERS = [
@@ -153,9 +158,9 @@ function getSeedData() {
   };
 }
 
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 // UTILITY COMPONENTS
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 function formatScripture(text) {
   if (!text) return text;
   const regex = /\b(\d?\s?[A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s+(\d+:\d+(?:-\d+)?(?:,\s*\d+)?)/g;
@@ -369,6 +374,161 @@ function PrestigeEmblem({ level, size = 24, showLabel = false }) {
   );
 }
 
+// ════════════════════════════════════════
+// CATEGORY PIE CHART & READER SUBTITLES
+// ════════════════════════════════════════
+const CATEGORY_SUBTITLES = {
+  "Systematic Theology": { title: "The Systematician", icon: "📐" },
+  "Biblical Theology": { title: "The Exegete", icon: "📜" },
+  "Church History": { title: "The Historian", icon: "🏛" },
+  "Apologetics": { title: "The Defender", icon: "🛡" },
+  "Devotional": { title: "The Devotee", icon: "🕯" },
+  "Confessional Studies": { title: "The Confessor", icon: "⚖" },
+  "Pastoral": { title: "The Shepherd", icon: "🪝" },
+  "Biography": { title: "The Chronicler", icon: "📖" },
+  "Theology Proper": { title: "The Theologian", icon: "✦" },
+};
+
+const CATEGORY_COMBO_SUBTITLES = {
+  "Systematic Theology+Apologetics": "Architect of the Faith",
+  "Systematic Theology+Devotional": "Scholar-Saint",
+  "Systematic Theology+Confessional Studies": "Creedal Mastermind",
+  "Systematic Theology+Pastoral": "Doctrine & Duty",
+  "Systematic Theology+Church History": "Keeper of the Tradition",
+  "Systematic Theology+Theology Proper": "Divine Cartographer",
+  "Systematic Theology+Biblical Theology": "Canon Architect",
+  "Apologetics+Devotional": "Heart & Shield",
+  "Apologetics+Church History": "Guardian of Memory",
+  "Apologetics+Confessional Studies": "Creedal Defender",
+  "Apologetics+Biblical Theology": "Scripture's Champion",
+  "Devotional+Pastoral": "Soul Tender",
+  "Devotional+Confessional Studies": "Pious Confessor",
+  "Devotional+Church History": "Pilgrim of Ages",
+  "Devotional+Biography": "Lives of the Saints",
+  "Devotional+Biblical Theology": "Meditative Exegete",
+  "Devotional+Theology Proper": "God-Entranced Mystic",
+  "Church History+Confessional Studies": "Keeper of the Creeds",
+  "Church History+Biography": "Chronicler of Giants",
+  "Church History+Pastoral": "Shepherd of Tradition",
+  "Pastoral+Confessional Studies": "Confessional Shepherd",
+  "Pastoral+Biography": "Leader Among Leaders",
+  "Biography+Church History": "Story Keeper",
+  "Theology Proper+Devotional": "God-Intoxicated",
+  "Theology Proper+Apologetics": "Divine Advocate",
+  "Theology Proper+Confessional Studies": "Creed & Character",
+};
+
+function getReaderSubtitle(categoryData) {
+  if (!categoryData || categoryData.length === 0) return null;
+  const sorted = [...categoryData].sort((a, b) => b.count - a.count);
+  if (sorted.length === 1 || sorted[0].count > 0 && sorted.length === 1) {
+    return CATEGORY_SUBTITLES[sorted[0].category]?.title || "The Reader";
+  }
+  const top1 = sorted[0]?.category;
+  const top2 = sorted[1]?.category;
+  if (!top1 || !top2 || sorted[0].count === 0) return null;
+  // Try both orderings for combo lookup
+  const combo1 = `${top1}+${top2}`;
+  const combo2 = `${top2}+${top1}`;
+  return CATEGORY_COMBO_SUBTITLES[combo1] || CATEGORY_COMBO_SUBTITLES[combo2] ||
+    `${CATEGORY_SUBTITLES[top1]?.title || "Reader"} & ${CATEGORY_SUBTITLES[top2]?.title || "Scholar"}`;
+}
+
+const PIE_COLORS = [
+  "#D4AF37", "#2B9EB3", "#C0392B", "#8E44AD", "#27AE60",
+  "#E67E22", "#3498DB", "#E74C3C", "#1ABC9C", "#F39C12"
+];
+
+function CategoryPieChart({ categoryData, size = 160 }) {
+  const total = categoryData.reduce((acc, c) => acc + c.count, 0);
+  if (total === 0) {
+    return (
+      <div style={{ textAlign: "center", padding: "20px 0" }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          <circle cx={size/2} cy={size/2} r={size * 0.4} fill="none" stroke="#2A2520" strokeWidth={size * 0.18} />
+          <text x={size/2} y={size/2} textAnchor="middle" dominantBaseline="middle"
+            fill="#4A4235" fontSize={11} fontFamily="Rajdhani, sans-serif" fontWeight="600">
+            NO DATA
+          </text>
+        </svg>
+      </div>
+    );
+  }
+
+  const cx = size / 2, cy = size / 2;
+  const outerR = size * 0.4;
+  const innerR = size * 0.22;
+  let currentAngle = -Math.PI / 2;
+  const slices = categoryData.filter(c => c.count > 0).map((c, i) => {
+    const pct = c.count / total;
+    const angle = pct * Math.PI * 2;
+    const startAngle = currentAngle;
+    const endAngle = currentAngle + angle;
+    currentAngle = endAngle;
+    const largeArc = angle > Math.PI ? 1 : 0;
+    const x1o = cx + outerR * Math.cos(startAngle);
+    const y1o = cy + outerR * Math.sin(startAngle);
+    const x2o = cx + outerR * Math.cos(endAngle);
+    const y2o = cy + outerR * Math.sin(endAngle);
+    const x1i = cx + innerR * Math.cos(endAngle);
+    const y1i = cy + innerR * Math.sin(endAngle);
+    const x2i = cx + innerR * Math.cos(startAngle);
+    const y2i = cy + innerR * Math.sin(startAngle);
+    const path = `M ${x1o} ${y1o} A ${outerR} ${outerR} 0 ${largeArc} 1 ${x2o} ${y2o} L ${x1i} ${y1i} A ${innerR} ${innerR} 0 ${largeArc} 0 ${x2i} ${y2i} Z`;
+    return { ...c, pct, path, color: PIE_COLORS[i % PIE_COLORS.length], startAngle, endAngle };
+  });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+      <div style={{ position: "relative", width: size, height: size }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          <defs>
+            {slices.map((s, i) => (
+              <filter key={`glow-${i}`} id={`pieGlow-${i}`}>
+                <feGaussianBlur stdDeviation="2" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
+            ))}
+          </defs>
+          {slices.map((s, i) => (
+            <path
+              key={i}
+              d={s.path}
+              fill={`${s.color}CC`}
+              stroke="#0D0B0A"
+              strokeWidth="1.5"
+              style={{ filter: `drop-shadow(0 0 4px ${s.color}44)`, transition: "all 0.3s" }}
+            >
+              <title>{s.category}: {s.count} book{s.count !== 1 ? "s" : ""} ({Math.round(s.pct * 100)}%)</title>
+            </path>
+          ))}
+          {/* Center text */}
+          <circle cx={cx} cy={cy} r={innerR - 2} fill="#0D0B0A" />
+          <text x={cx} y={cy - 6} textAnchor="middle" dominantBaseline="middle"
+            fill="#D4AF37" fontSize={size * 0.14} fontWeight="700" fontFamily="Rajdhani, sans-serif">
+            {total}
+          </text>
+          <text x={cx} y={cy + 10} textAnchor="middle" dominantBaseline="middle"
+            fill="#6B6152" fontSize={size * 0.065} fontWeight="600" fontFamily="Rajdhani, sans-serif"
+            letterSpacing="1.5">
+            BOOKS
+          </text>
+        </svg>
+      </div>
+      {/* Legend */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", justifyContent: "center", maxWidth: 320 }}>
+        {slices.map((s, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: s.color, flexShrink: 0, boxShadow: `0 0 6px ${s.color}44` }} />
+            <span style={{ color: "#A09880", whiteSpace: "nowrap" }}>{s.category}</span>
+            <span style={{ color: "#6B6152", fontFamily: "Rajdhani, sans-serif", fontWeight: 600 }}>{Math.round(s.pct * 100)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Avatar({ member, size = 40, showTitle = true }) {
   const { data } = useContext(AppContext);
   const seal = SEAL_DEFINITIONS.find(s => s.name === data.equippedTitles?.[member.id]);
@@ -493,9 +653,9 @@ function Modal({ open, onClose, title, children, wide }) {
   );
 }
 
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 // PAGE: HOME / DASHBOARD
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 function HomePage() {
   const { data, setData, currentUser, setPage } = useContext(AppContext);
   const todayVerse = DAILY_VERSES[new Date().getDay() % DAILY_VERSES.length];
@@ -720,9 +880,9 @@ function HomePage() {
   );
 }
 
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 // PAGE: TRIUMPHS / SEALS
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 function TriumphsPage() {
   const { data, setData, currentUser, isAdmin } = useContext(AppContext);
   const [selectedSeal, setSelectedSeal] = useState(null);
@@ -1069,9 +1229,9 @@ function TriumphsPage() {
   );
 }
 
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 // PAGE: LIBRARY / READING TRACKER
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 function LibraryPage() {
   const { data, setData, currentUser } = useContext(AppContext);
   const [filter, setFilter] = useState("All");
@@ -1248,7 +1408,7 @@ function LibraryPage() {
                   <div className="avatar" style={{ width: 28, height: 28, fontSize: 9 }}>{member.avatar}</div>
                   <span style={{ color: "#E8E0D0", fontSize: 13, fontWeight: 600 }}>{member.name}</span>
                   <span style={{ color: done ? "#27AE60" : "#2B9EB3", fontSize: 12, fontWeight: 700, marginLeft: "auto", fontFamily: "'Rajdhani', sans-serif", letterSpacing: 1 }}>
-                    {done ? "✓ COMPLETE" : `${pct}%`}
+                    {done ? "✔ COMPLETE" : `${pct}%`}
                   </span>
                 </div>
                 <ProgressBar value={pg} max={grBook.pages} color={done ? "#27AE60" : "#2B9EB3"} height={4} />
@@ -1370,7 +1530,7 @@ function LibraryPage() {
                               <span style={{ color: "#C8BFA8", fontSize: 12 }}>{member.name}</span>
                             </div>
                             <span style={{ color: done ? "#27AE60" : "#2B9EB3", fontSize: 11, fontWeight: 600 }}>
-                              {done ? "✓ DONE" : `${pct}%`}
+                              {done ? "✔ DONE" : `${pct}%`}
                             </span>
                           </div>
                           <ProgressBar value={pg} max={book.pages} color={done ? "#27AE60" : "#2B9EB3"} height={3} />
@@ -1437,7 +1597,7 @@ function LibraryPage() {
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                         <span style={{ color: "#C8BFA8", fontSize: 12 }}>{m.name}</span>
                         <span style={{ color: pg >= book.pages ? "#27AE60" : "#D4AF37", fontSize: 12, fontWeight: 600 }}>
-                          {pg >= book.pages ? "✓ COMPLETE" : `${pct}%`}
+                          {pg >= book.pages ? "✔ COMPLETE" : `${pct}%`}
                         </span>
                       </div>
                       <ProgressBar value={pg} max={book.pages} color={pg >= book.pages ? "#27AE60" : "#D4AF37"} height={4} />
@@ -1623,7 +1783,7 @@ function LibraryPage() {
                 )}
               </button>
               <div style={{ color: "#4A4235", fontSize: 11 }}>
-                {newBook.coverUrl ? "✓ Cover found!" : "Enter title & author, then search"}
+                {newBook.coverUrl ? "✔ Cover found!" : "Enter title & author, then search"}
               </div>
               {newBook.coverUrl && (
                 <button
@@ -1649,9 +1809,9 @@ function LibraryPage() {
   );
 }
 
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 // PAGE: REVIEWS
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 function ReviewsPage() {
   const { data, setData, currentUser, isAdmin } = useContext(AppContext);
   const [showWrite, setShowWrite] = useState(false);
@@ -1757,9 +1917,9 @@ function ReviewsPage() {
   );
 }
 
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 // PAGE: FORUM
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 function ForumPage() {
   const { data, setData, currentUser, isAdmin } = useContext(AppContext);
   const [selectedThread, setSelectedThread] = useState(null);
@@ -1977,9 +2137,9 @@ function ForumPage() {
   );
 }
 
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 // PAGE: MEMBERS
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 function MembersPage() {
   const { data, setPage, setProfileTarget } = useContext(AppContext);
 
@@ -2050,9 +2210,9 @@ function MembersPage() {
   );
 }
 
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 // BIBLE DATA
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 const BIBLE_BOOKS = {
   OT: [
     { cat: "Pentateuch", color: "#D4AF37", books: [
@@ -2105,9 +2265,9 @@ const BIBLE_BOOKS = {
   ],
 };
 
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 // PAGE: THE DIRECTOR (Bible Reading Tracker)
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 function SolarSystem({ categories, bp, getBookProgress, selectedBook, setSelectedBook, hoveredBook, setHoveredBook, overallPct, label }) {
   const CX = 400, CY = 400;
   const ringRadii = categories.length <= 3 ? [120, 210, 300] :
@@ -2699,9 +2859,9 @@ function DirectorPage() {
   );
 }
 
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 // PAGE: PROFILE
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 function ProfilePage() {
   const { data, setData, currentUser, profileTarget, setPage } = useContext(AppContext);
   const memberId = profileTarget || currentUser.id;
@@ -2727,6 +2887,18 @@ function ProfilePage() {
   const seal = SEAL_DEFINITIONS.find(s => s.name === data.equippedTitles?.[memberId]);
   const completedSealDefs = (data.completedSeals?.[memberId] || []).map(sId => SEAL_DEFINITIONS.find(s => s.id === sId)).filter(Boolean);
 
+  // Build category breakdown from completed books
+  const categoryMap = {};
+  Object.keys(prg).forEach(bId => {
+    const book = data.books.find(b => b.id === bId);
+    if (!book) return;
+    if (prg[bId] >= book.pages) {
+      categoryMap[book.category] = (categoryMap[book.category] || 0) + 1;
+    }
+  });
+  const categoryData = Object.entries(categoryMap).map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count);
+  const readerSubtitle = getReaderSubtitle(categoryData);
+
   function equipTitle(sealName) {
     setData(d => ({ ...d, equippedTitles: { ...d.equippedTitles, [memberId]: sealName } }));
   }
@@ -2747,6 +2919,24 @@ function ProfilePage() {
             {data.equippedTitles?.[memberId] && (
               <GlowTitle title={data.equippedTitles[memberId]} color={seal?.color} />
             )}
+            {readerSubtitle && (
+              <div style={{
+                marginTop: 4, fontFamily: "'Rajdhani', sans-serif", fontWeight: 600,
+                fontSize: 13, letterSpacing: 1.5, color: "#A09880",
+                textTransform: "uppercase",
+                display: "flex", alignItems: "center", gap: 6,
+              }}>
+                <span style={{ opacity: 0.5 }}>◆</span>
+                <span style={{ 
+                  background: "linear-gradient(90deg, #D4AF37, #E8D44D, #D4AF37)",
+                  WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                }}>
+                  {readerSubtitle}
+                </span>
+                <span style={{ opacity: 0.5 }}>◆</span>
+              </div>
+            )}
             <div className="member-light-level" style={{ marginTop: 8 }}>
               <Zap size={14} style={{ color: "#D4AF37" }} />
               <span style={{ fontSize: 16 }}>Light Level {lightLevel}</span>
@@ -2762,6 +2952,37 @@ function ProfilePage() {
           <div className="profile-stat"><span className="p-stat-num">{replies}</span><span className="p-stat-lbl">Replies</span></div>
           <div className="profile-stat"><span className="p-stat-num">{sealsEarned}</span><span className="p-stat-lbl">Seals</span></div>
         </div>
+      </Panel>
+
+      {/* Category Breakdown Pie Chart */}
+      <div className="section-title" style={{ margin: "24px 0 12px" }}>READING PROFILE</div>
+      <Panel>
+        {categoryData.length > 0 ? (
+          <div style={{ padding: "8px 0" }}>
+            {readerSubtitle && (
+              <div style={{ textAlign: "center", marginBottom: 16 }}>
+                <div style={{
+                  fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: 20,
+                  letterSpacing: 2, textTransform: "uppercase",
+                  background: "linear-gradient(90deg, #D4AF37, #E8D44D, #D4AF37)",
+                  WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                }}>
+                  "{readerSubtitle}"
+                </div>
+                <div style={{ color: "#6B6152", fontSize: 11, marginTop: 4, letterSpacing: 1 }}>
+                  BASED ON TOP {Math.min(2, categoryData.length)} CATEGOR{categoryData.length === 1 ? "Y" : "IES"}
+                </div>
+              </div>
+            )}
+            <CategoryPieChart categoryData={categoryData} size={160} />
+          </div>
+        ) : (
+          <div style={{ textAlign: "center", padding: "24px 0", color: "#4A4235", fontSize: 13 }}>
+            <BookOpen size={24} style={{ opacity: 0.3, marginBottom: 8, display: "block", margin: "0 auto 8px" }} />
+            Complete books to see your reading profile
+          </div>
+        )}
       </Panel>
 
       {/* Prestige Showcase */}
@@ -2875,9 +3096,9 @@ function ProfilePage() {
   );
 }
 
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 // MAIN APP
-// ═══════════════════════════════════════════
+// ════════════════════════════════════════
 const STYLES = `
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Jost:wght@300;400;500;600;700&display=swap');
 
