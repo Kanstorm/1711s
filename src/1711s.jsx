@@ -654,6 +654,587 @@ function Modal({ open, onClose, title, children, wide }) {
 }
 
 // ════════════════════════════════════════
+// PRESTIGE ANIMATION (Full-screen cinematic)
+// ════════════════════════════════════════
+function PrestigeAnimation({ oldLevel, newLevel, onComplete }) {
+  const canvasRef = useRef(null);
+  const [phase, setPhase] = useState(0);
+  const [textOpacity, setTextOpacity] = useState(0);
+  const [showNewStar, setShowNewStar] = useState(false);
+  const [showText, setShowText] = useState(false);
+  const [screenFlash, setScreenFlash] = useState(0);
+  const animRef = useRef(null);
+  const particlesRef = useRef([]);
+  const startTimeRef = useRef(null);
+  const cracksRef = useRef([]);
+  const emberRef = useRef([]);
+
+  const isFirstPrestige = oldLevel === 0;
+  const oldColor = isFirstPrestige ? '#6B6152' : getPrestigeColor(oldLevel);
+  const newColor = getPrestigeColor(newLevel);
+  const newName = getPrestigeName(newLevel);
+  const isMax = newLevel >= 10;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    canvas.width = W;
+    canvas.height = H;
+    const cx = W / 2, cy = H / 2;
+
+    // Generate cracks from center (only for non-first prestige)
+    if (!isFirstPrestige) {
+      cracksRef.current = Array.from({ length: 8 }, (_, i) => {
+        const angle = (i / 8) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
+        const segments = [];
+        let x = 0, y = 0;
+        const numSegs = 4 + Math.floor(Math.random() * 4);
+        for (let s = 0; s < numSegs; s++) {
+          const len = 15 + Math.random() * 25;
+          const deviation = (Math.random() - 0.5) * 0.6;
+          const nx = x + Math.cos(angle + deviation) * len;
+          const ny = y + Math.sin(angle + deviation) * len;
+          segments.push({ x: nx, y: ny });
+          x = nx; y = ny;
+        }
+        return { angle, segments, progress: 0 };
+      });
+    }
+
+    // Initialize explosion particles
+    particlesRef.current = Array.from({ length: isFirstPrestige ? 80 : 120 }, () => {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = isFirstPrestige ? (1 + Math.random() * 4) : (2 + Math.random() * 8);
+      const size = 2 + Math.random() * 5;
+      return {
+        x: cx, y: cy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        size,
+        life: 1,
+        decay: 0.005 + Math.random() * 0.012,
+        color: isFirstPrestige ? (Math.random() > 0.5 ? newColor : '#FFD700') : (Math.random() > 0.5 ? oldColor : '#FFD700'),
+        type: Math.random() > 0.7 ? 'spark' : 'ember',
+        rotation: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 0.15,
+        trail: [],
+      };
+    });
+
+    // Embers that float up after
+    emberRef.current = Array.from({ length: 60 }, () => ({
+      x: cx + (Math.random() - 0.5) * W * 0.6,
+      y: cy + (Math.random() - 0.5) * H * 0.4,
+      vx: (Math.random() - 0.5) * 0.5,
+      vy: -0.5 - Math.random() * 2,
+      size: 1 + Math.random() * 3,
+      life: 1,
+      decay: 0.003 + Math.random() * 0.005,
+      color: newColor,
+      flickerPhase: Math.random() * Math.PI * 2,
+    }));
+
+    startTimeRef.current = performance.now();
+    let currentPhase = 0;
+
+    // ── Shape drawing matching PrestigeEmblem exactly ──
+    // level 1 = triangle, level 2 = diamond, level 3+ = star with N points
+    function drawPrestigeShape(x, y, r, level, innerR, color, glow = 0, opacity = 1) {
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      if (glow > 0) {
+        ctx.shadowColor = color;
+        ctx.shadowBlur = glow;
+      }
+      const pts = Math.min(level, 10);
+      ctx.beginPath();
+      if (pts === 1) {
+        // Triangle (matches PrestigeEmblem level 1)
+        ctx.moveTo(x, y - r);
+        ctx.lineTo(x + r * 0.87, y + r * 0.5);
+        ctx.lineTo(x - r * 0.87, y + r * 0.5);
+      } else if (pts === 2) {
+        // Diamond (matches PrestigeEmblem level 2)
+        ctx.moveTo(x, y - r);
+        ctx.lineTo(x + innerR, y);
+        ctx.lineTo(x, y + r);
+        ctx.lineTo(x - innerR, y);
+      } else {
+        // Star with N points (matches PrestigeEmblem level 3+)
+        for (let i = 0; i < pts; i++) {
+          const outerAngle = (i / pts) * Math.PI * 2 - Math.PI / 2;
+          const innerAngle = ((i + 0.5) / pts) * Math.PI * 2 - Math.PI / 2;
+          const ox = x + r * Math.cos(outerAngle);
+          const oy = y + r * Math.sin(outerAngle);
+          const ix = x + innerR * Math.cos(innerAngle);
+          const iy = y + innerR * Math.sin(innerAngle);
+          if (i === 0) ctx.moveTo(ox, oy);
+          else ctx.lineTo(ox, oy);
+          ctx.lineTo(ix, iy);
+        }
+      }
+      ctx.closePath();
+      ctx.fillStyle = color + '44';
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Draw a glowing orb (for 0 → 1 transition: no star, just a sphere)
+    function drawOrb(x, y, r, color, glow = 0, opacity = 1) {
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, color + 'AA');
+      grad.addColorStop(0.5, color + '44');
+      grad.addColorStop(1, color + '00');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      // Outer ring
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.65, 0, Math.PI * 2);
+      ctx.strokeStyle = color + '88';
+      ctx.lineWidth = 1.5;
+      if (glow > 0) {
+        ctx.shadowColor = color;
+        ctx.shadowBlur = glow;
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Timings adjust for first prestige (shorter crack phase since no star to crack)
+    const phase0End = isFirstPrestige ? 2.0 : 2.5;
+    const phase1End = phase0End + 2.0;
+    const phase2End = phase1End + 3.0;
+    const phase3End = phase2End + 2.5;
+
+    function animate(now) {
+      const elapsed = (now - startTimeRef.current) / 1000;
+      ctx.clearRect(0, 0, W, H);
+
+      // Background darken
+      ctx.fillStyle = `rgba(13, 11, 10, ${Math.min(0.95, elapsed * 2)})`;
+      ctx.fillRect(0, 0, W, H);
+
+      // ── Phase 0: Old shape appears (or orb for first prestige) ──
+      if (elapsed < phase0End) {
+        currentPhase = 0;
+        const pulse = 1 + Math.sin(elapsed * 8) * 0.04 * Math.min(1, elapsed);
+        const shakeStart = isFirstPrestige ? 1.0 : 1.5;
+        const shake = elapsed > shakeStart ? (elapsed - shakeStart) * 6 : 0;
+        const sx = cx + (Math.random() - 0.5) * shake;
+        const sy = cy + (Math.random() - 0.5) * shake;
+
+        if (isFirstPrestige) {
+          // No star — draw a dim pulsing orb that's gathering energy
+          const orbR = 50 * pulse;
+          const intensity = 0.4 + elapsed * 0.3;
+          drawOrb(sx, sy, orbR, '#6B6152', 10 + elapsed * 15, intensity);
+
+          // Gathering light particles converging inward
+          if (elapsed > 0.5) {
+            const gatherT = (elapsed - 0.5) / (phase0End - 0.5);
+            for (let i = 0; i < 16; i++) {
+              const angle = (i / 16) * Math.PI * 2 + elapsed * 0.5;
+              const dist = 200 * (1 - gatherT * 0.5) + Math.sin(elapsed * 4 + i) * 20;
+              const px = cx + Math.cos(angle) * dist;
+              const py = cy + Math.sin(angle) * dist;
+              ctx.save();
+              ctx.globalAlpha = gatherT * 0.5;
+              ctx.beginPath();
+              ctx.arc(px, py, 2, 0, Math.PI * 2);
+              ctx.fillStyle = newColor;
+              ctx.shadowColor = newColor;
+              ctx.shadowBlur = 6;
+              ctx.fill();
+              ctx.restore();
+            }
+          }
+
+          // Text
+          if (elapsed > 1.0) {
+            ctx.save();
+            ctx.globalAlpha = Math.min(1, (elapsed - 1.0) * 3);
+            ctx.fillStyle = newColor;
+            ctx.font = '600 12px Rajdhani, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('A NEW SEAL AWAKENS', cx, cy + 90);
+            ctx.restore();
+          }
+        } else {
+          // Show old prestige shape with cracks
+          const starSize = 60 * pulse;
+          const innerSize = 26 * pulse;
+          drawPrestigeShape(sx, sy, starSize, oldLevel, innerSize, oldColor, 20 + elapsed * 15);
+
+          // Center number
+          ctx.save();
+          ctx.fillStyle = oldColor;
+          ctx.font = 'bold 24px Rajdhani, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(oldLevel), sx, sy + 2);
+          ctx.restore();
+
+          // Cracks growing
+          if (elapsed > 0.8) {
+            const crackProgress = Math.min(1, (elapsed - 0.8) / 1.5);
+            ctx.save();
+            ctx.translate(sx, sy);
+            cracksRef.current.forEach(crack => {
+              const numVisible = Math.floor(crackProgress * crack.segments.length);
+              if (numVisible < 1) return;
+              ctx.beginPath();
+              ctx.moveTo(0, 0);
+              for (let i = 0; i < numVisible; i++) {
+                ctx.lineTo(crack.segments[i].x, crack.segments[i].y);
+              }
+              if (numVisible < crack.segments.length) {
+                const frac = (crackProgress * crack.segments.length) - numVisible;
+                const prev = numVisible > 0 ? crack.segments[numVisible - 1] : { x: 0, y: 0 };
+                const next = crack.segments[numVisible];
+                ctx.lineTo(prev.x + (next.x - prev.x) * frac, prev.y + (next.y - prev.y) * frac);
+              }
+              ctx.strokeStyle = '#FFD70088';
+              ctx.lineWidth = 1.5;
+              ctx.shadowColor = '#FFD700';
+              ctx.shadowBlur = 8;
+              ctx.stroke();
+              ctx.strokeStyle = '#FFFFFF44';
+              ctx.lineWidth = 0.5;
+              ctx.stroke();
+            });
+            ctx.restore();
+          }
+
+          // Text
+          if (elapsed > 1.8) {
+            ctx.save();
+            ctx.globalAlpha = Math.min(1, (elapsed - 1.8) * 3);
+            ctx.fillStyle = oldColor;
+            ctx.font = '600 12px Rajdhani, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('THE SEAL BREAKS', cx, cy + 100);
+            ctx.restore();
+          }
+        }
+      }
+      // ── Phase 1: Explosion / Burst ──
+      else if (elapsed < phase1End) {
+        if (currentPhase < 1) {
+          currentPhase = 1;
+          setPhase(1);
+          setScreenFlash(1);
+          setTimeout(() => setScreenFlash(0), 200);
+        }
+        const t = (elapsed - phase0End) / 2;
+
+        // Shockwave ring
+        const swRadius = t * Math.max(W, H) * 0.6;
+        const swOpacity = Math.max(0, 1 - t * 1.2);
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, swRadius, 0, Math.PI * 2);
+        ctx.strokeStyle = isFirstPrestige
+          ? `rgba(232, 212, 77, ${swOpacity * 0.6})`
+          : `rgba(255, 215, 0, ${swOpacity * 0.6})`;
+        ctx.lineWidth = 3 + (1 - t) * 8;
+        ctx.shadowColor = isFirstPrestige ? newColor : '#FFD700';
+        ctx.shadowBlur = 30;
+        ctx.stroke();
+        ctx.restore();
+
+        // Second shockwave
+        if (t > 0.15) {
+          const sw2t = t - 0.15;
+          const sw2Radius = sw2t * Math.max(W, H) * 0.5;
+          const sw2Opacity = Math.max(0, 1 - sw2t * 1.4);
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(cx, cy, sw2Radius, 0, Math.PI * 2);
+          const hexOp = Math.round(sw2Opacity * 100).toString(16).padStart(2, '0');
+          ctx.strokeStyle = (isFirstPrestige ? newColor : oldColor) + hexOp;
+          ctx.lineWidth = 2 + (1 - sw2t) * 5;
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Debris/particles
+        particlesRef.current.forEach(p => {
+          if (p.life <= 0) return;
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.03;
+          p.vx *= 0.995;
+          p.life -= p.decay;
+          p.rotation += p.rotSpeed;
+          p.trail.push({ x: p.x, y: p.y, life: 0.5 });
+          if (p.trail.length > 8) p.trail.shift();
+
+          if (p.type === 'spark') {
+            p.trail.forEach(tp => {
+              tp.life -= 0.05;
+              if (tp.life <= 0) return;
+              ctx.save();
+              ctx.globalAlpha = tp.life * p.life * 0.5;
+              ctx.beginPath();
+              ctx.arc(tp.x, tp.y, p.size * 0.4, 0, Math.PI * 2);
+              ctx.fillStyle = p.color;
+              ctx.fill();
+              ctx.restore();
+            });
+          }
+
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, p.life);
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rotation);
+          if (p.type === 'spark') {
+            ctx.beginPath();
+            ctx.moveTo(-p.size, 0);
+            ctx.lineTo(0, -p.size * 0.3);
+            ctx.lineTo(p.size, 0);
+            ctx.lineTo(0, p.size * 0.3);
+            ctx.closePath();
+            ctx.fillStyle = '#FFF';
+            ctx.shadowColor = p.color;
+            ctx.shadowBlur = 12;
+            ctx.fill();
+            ctx.fillStyle = p.color;
+            ctx.fill();
+          } else {
+            ctx.beginPath();
+            ctx.arc(0, 0, p.size, 0, Math.PI * 2);
+            ctx.fillStyle = p.color;
+            ctx.shadowColor = p.color;
+            ctx.shadowBlur = 8;
+            ctx.fill();
+          }
+          ctx.restore();
+        });
+
+        // Center glow fading
+        const centerGlow = Math.max(0, 1 - t * 2);
+        if (centerGlow > 0) {
+          const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 120);
+          grad.addColorStop(0, `rgba(255,255,255,${centerGlow * 0.8})`);
+          grad.addColorStop(0.3, `rgba(255,215,0,${centerGlow * 0.4})`);
+          grad.addColorStop(1, 'rgba(255,215,0,0)');
+          ctx.fillStyle = grad;
+          ctx.fillRect(cx - 120, cy - 120, 240, 240);
+        }
+      }
+      // ── Phase 2: New shape reforms from light ──
+      else if (elapsed < phase2End) {
+        if (currentPhase < 2) {
+          currentPhase = 2;
+          setPhase(2);
+          setShowNewStar(true);
+        }
+        const t = (elapsed - phase1End) / 3;
+
+        // Floating embers
+        emberRef.current.forEach(e => {
+          if (e.life <= 0) return;
+          e.x += e.vx + Math.sin(e.flickerPhase + elapsed * 2) * 0.3;
+          e.y += e.vy;
+          e.life -= e.decay;
+          e.flickerPhase += 0.02;
+          ctx.save();
+          ctx.globalAlpha = e.life * (0.3 + Math.sin(e.flickerPhase) * 0.2);
+          ctx.beginPath();
+          ctx.arc(e.x, e.y, e.size, 0, Math.PI * 2);
+          ctx.fillStyle = e.color;
+          ctx.shadowColor = e.color;
+          ctx.shadowBlur = 6;
+          ctx.fill();
+          ctx.restore();
+        });
+
+        // Converging light rays
+        const numRays = 12;
+        const rayProgress = Math.min(1, t * 1.5);
+        for (let i = 0; i < numRays; i++) {
+          const angle = (i / numRays) * Math.PI * 2;
+          const dist = 300 * (1 - rayProgress);
+          const sx = cx + Math.cos(angle) * dist;
+          const sy = cy + Math.sin(angle) * dist;
+          ctx.save();
+          ctx.globalAlpha = rayProgress * 0.4;
+          ctx.beginPath();
+          ctx.moveTo(sx, sy);
+          ctx.lineTo(cx, cy);
+          ctx.strokeStyle = newColor;
+          ctx.lineWidth = 1;
+          ctx.shadowColor = newColor;
+          ctx.shadowBlur = 10;
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // New shape materializing
+        if (t > 0.3) {
+          const starT = (t - 0.3) / 0.7;
+          const shapeSize = 65 * Math.min(1, starT * 1.2);
+          const innerSize = 28 * Math.min(1, starT * 1.2);
+          const starOp = Math.min(1, starT * 1.5);
+          const glow = 20 + starT * 40;
+
+          // Aura ring
+          ctx.save();
+          ctx.globalAlpha = starOp * 0.3;
+          ctx.beginPath();
+          ctx.arc(cx, cy, shapeSize + 20 + Math.sin(elapsed * 3) * 5, 0, Math.PI * 2);
+          ctx.strokeStyle = newColor;
+          ctx.lineWidth = 1;
+          ctx.shadowColor = newColor;
+          ctx.shadowBlur = 20;
+          ctx.stroke();
+          ctx.restore();
+
+          drawPrestigeShape(cx, cy, shapeSize, newLevel, innerSize, newColor, glow, starOp);
+
+          // Center number/symbol
+          ctx.save();
+          ctx.globalAlpha = Math.min(1, starOp);
+          ctx.fillStyle = isMax ? '#FFD4AA' : newColor;
+          ctx.font = 'bold 26px Rajdhani, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.shadowColor = newColor;
+          ctx.shadowBlur = 10;
+          ctx.fillText(isMax ? '✦' : String(newLevel), cx, cy + 2);
+          ctx.restore();
+        }
+      }
+      // ── Phase 3: Hold and reveal title ──
+      else if (elapsed < phase3End) {
+        if (currentPhase < 3) {
+          currentPhase = 3;
+          setPhase(3);
+          setShowText(true);
+          setTimeout(() => setTextOpacity(1), 100);
+          if (isMax) {
+            setScreenFlash(0.5);
+            setTimeout(() => setScreenFlash(0), 300);
+          }
+        }
+
+        // Remaining embers
+        emberRef.current.forEach(e => {
+          if (e.life <= 0) return;
+          e.x += e.vx;
+          e.y += e.vy;
+          e.life -= e.decay * 0.5;
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, e.life * 0.3);
+          ctx.beginPath();
+          ctx.arc(e.x, e.y, e.size * 0.7, 0, Math.PI * 2);
+          ctx.fillStyle = e.color;
+          ctx.shadowColor = e.color;
+          ctx.shadowBlur = 4;
+          ctx.fill();
+          ctx.restore();
+        });
+
+        // Final shape with full glow
+        const pulse = 1 + Math.sin(elapsed * 2.5) * 0.02;
+        const shapeSize = 65 * pulse;
+        const innerSize = 28 * pulse;
+
+        // Orbiting particles
+        for (let i = 0; i < 8; i++) {
+          const orbitAngle = (i / 8) * Math.PI * 2 + elapsed * 0.8;
+          const orbitR = shapeSize + 30 + Math.sin(elapsed * 2 + i) * 8;
+          const ox = cx + Math.cos(orbitAngle) * orbitR;
+          const oy = cy + Math.sin(orbitAngle) * orbitR;
+          ctx.save();
+          ctx.globalAlpha = 0.5;
+          ctx.beginPath();
+          ctx.arc(ox, oy, 2, 0, Math.PI * 2);
+          ctx.fillStyle = newColor;
+          ctx.shadowColor = newColor;
+          ctx.shadowBlur = 8;
+          ctx.fill();
+          ctx.restore();
+        }
+
+        drawPrestigeShape(cx, cy, shapeSize, newLevel, innerSize, newColor, 50);
+
+        // Center
+        ctx.save();
+        ctx.fillStyle = isMax ? '#FFD4AA' : newColor;
+        ctx.font = 'bold 26px Rajdhani, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = newColor;
+        ctx.shadowBlur = 15;
+        ctx.fillText(isMax ? '✦' : String(newLevel), cx, cy + 2);
+        ctx.restore();
+      }
+      // ── Phase 4: Fade out ──
+      else {
+        if (currentPhase < 4) {
+          currentPhase = 4;
+          setPhase(4);
+          setTimeout(() => onComplete(), 1500);
+        }
+        return;
+      }
+
+      animRef.current = requestAnimationFrame(animate);
+    }
+
+    animRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+    };
+  }, []);
+
+  return (
+    <div className="prestige-anim-overlay" style={{ opacity: phase === 4 ? 0 : 1 }}>
+      {screenFlash > 0 && (
+        <div style={{
+          position: 'absolute', inset: 0, background: '#FFF',
+          opacity: screenFlash, zIndex: 3, pointerEvents: 'none',
+          transition: 'opacity 0.2s',
+        }} />
+      )}
+      <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, zIndex: 1 }} />
+      {showText && (
+        <div className="prestige-anim-text" style={{ opacity: textOpacity }}>
+          <div className="prestige-anim-label" style={{ color: newColor }}>
+            {isMax ? '★ MAX PRESTIGE ★' : `PRESTIGE ${newLevel}`}
+          </div>
+          <div className="prestige-anim-name" style={{
+            color: newColor,
+            textShadow: `0 0 30px ${newColor}66, 0 0 60px ${newColor}33`,
+          }}>
+            {newName}
+          </div>
+          <div className="prestige-anim-sub">
+            {isFirstPrestige ? 'Your journey through Scripture begins' : isMax ? 'The eternal flame burns within you' : 'Your seal has been reforged'}
+          </div>
+          <button className="prestige-anim-continue" style={{ borderColor: newColor, color: newColor }}
+            onClick={onComplete}>
+            Continue
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════
 // PAGE: HOME / DASHBOARD
 // ════════════════════════════════════════
 function HomePage() {
@@ -2344,22 +2925,32 @@ function DirectorPage() {
   const [selectedBook, setSelectedBook] = useState(null);
   const [hoveredBook, setHoveredBook] = useState(null);
   const [showPrestigeConfirm, setShowPrestigeConfirm] = useState(false);
+  const [prestigeAnim, setPrestigeAnim] = useState(null); // { oldLevel, newLevel }
 
   const bp = data.bibleProgress?.[currentUser.id] || {};
   const prestigeLevel = data.prestigeLevel?.[currentUser.id] || 0;
 
   function prestige() {
-    setData(d => ({
-      ...d,
-      bibleProgress: { ...d.bibleProgress, [currentUser.id]: {} },
-      prestigeLevel: { ...d.prestigeLevel, [currentUser.id]: (d.prestigeLevel?.[currentUser.id] || 0) + 1 },
-      activities: [...d.activities, {
-        id: `a${Date.now()}`, type: "prestige", memberId: currentUser.id,
-        text: `achieved Prestige ${(d.prestigeLevel?.[currentUser.id] || 0) + 1} — read through the entire Bible!`,
-        date: new Date().toISOString().split("T")[0], icon: "★",
-      }],
-    }));
+    const oldLvl = data.prestigeLevel?.[currentUser.id] || 0;
+    const newLvl = oldLvl + 1;
     setShowPrestigeConfirm(false);
+    // Start animation FIRST, then apply data change during animation
+    setPrestigeAnim({ oldLevel: oldLvl, newLevel: newLvl });
+    // Delay the data update so the animation shows the old shape first
+    // First prestige (0→1) has shorter intro phase
+    const delay = oldLvl === 0 ? 2100 : 2600;
+    setTimeout(() => {
+      setData(d => ({
+        ...d,
+        bibleProgress: { ...d.bibleProgress, [currentUser.id]: {} },
+        prestigeLevel: { ...d.prestigeLevel, [currentUser.id]: newLvl },
+        activities: [...d.activities, {
+          id: `a${Date.now()}`, type: "prestige", memberId: currentUser.id,
+          text: `achieved Prestige ${newLvl} — read through the entire Bible!`,
+          date: new Date().toISOString().split("T")[0], icon: "★",
+        }],
+      }));
+    }, delay); // Apply after explosion phase
   }
 
   function getBookProgress(bookName, totalCh) {
@@ -2706,6 +3297,15 @@ function DirectorPage() {
             </div>
           </div>
         </Modal>
+
+        {/* Full-screen Prestige Animation */}
+        {prestigeAnim && (
+          <PrestigeAnimation
+            oldLevel={prestigeAnim.oldLevel}
+            newLevel={prestigeAnim.newLevel}
+            onComplete={() => setPrestigeAnim(null)}
+          />
+        )}
       </div>
     );
   }
@@ -3768,6 +4368,78 @@ select.text-input { cursor: pointer; }
   transition: all 0.2s;
 }
 .prestige-confirm-btn:hover { transform: scale(1.05); }
+
+/* ═══ PRESTIGE ANIMATION ═══ */
+.prestige-anim-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(13, 11, 10, 0.98);
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity 1.5s ease;
+}
+.prestige-anim-text {
+  position: absolute; z-index: 5;
+  text-align: center;
+  transition: opacity 1.2s ease;
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  margin-top: 100px;
+}
+.prestige-anim-label {
+  font-family: 'Rajdhani', sans-serif; font-weight: 800;
+  font-size: 16px; letter-spacing: 6px; text-transform: uppercase;
+  margin-bottom: 8px;
+  animation: animLabelIn 1s ease both;
+}
+.prestige-anim-name {
+  font-family: 'Rajdhani', sans-serif; font-weight: 700;
+  font-size: 48px; letter-spacing: 4px; text-transform: uppercase;
+  line-height: 1.1;
+  animation: animNameIn 1.2s ease 0.3s both;
+}
+.prestige-anim-sub {
+  font-family: 'Jost', sans-serif; font-weight: 400;
+  font-size: 14px; color: #6B6152; letter-spacing: 1px;
+  margin-top: 12px;
+  animation: animSubIn 1s ease 0.8s both;
+}
+.prestige-anim-continue {
+  margin-top: 32px;
+  padding: 10px 32px;
+  background: transparent;
+  border: 1px solid #D4AF37;
+  border-radius: 4px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px; font-weight: 700;
+  letter-spacing: 3px; text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.3s;
+  animation: animBtnIn 0.8s ease 1.2s both;
+}
+.prestige-anim-continue:hover {
+  background: rgba(212, 175, 55, 0.1);
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
+}
+@keyframes animLabelIn {
+  from { opacity: 0; transform: translateY(20px); letter-spacing: 12px; }
+  to { opacity: 1; transform: translateY(0); letter-spacing: 6px; }
+}
+@keyframes animNameIn {
+  from { opacity: 0; transform: scale(0.7); filter: blur(8px); }
+  to { opacity: 1; transform: scale(1); filter: blur(0); }
+}
+@keyframes animSubIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 0.7; transform: translateY(0); }
+}
+@keyframes animBtnIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 600px) {
+  .prestige-anim-name { font-size: 32px; letter-spacing: 2px; }
+  .prestige-anim-label { font-size: 13px; letter-spacing: 4px; }
+  .prestige-anim-text { margin-top: 80px; padding: 0 20px; }
+}
 
 .prestige-wings-preview { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
 .prestige-wings-label {
