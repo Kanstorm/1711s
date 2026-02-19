@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, createContext, useContext } from "react";
 import { BookOpen, MessageSquare, Trophy, Users, Star, ChevronRight, ChevronDown, Send, Flame, Search, Plus, X, Check, Clock, TrendingUp, Award, Bookmark, ArrowLeft, Heart, Zap, Eye, Edit3, Hash, Menu } from "lucide-react";
+import { supabase } from "./supabaseClient";
+import { loadAllData, syncChanges } from "./supabaseData";
 
 // Polyfill storage for browser (in-memory fallback if localStorage unavailable)
 if (!window.storage) {
@@ -27,27 +29,21 @@ if (!window.storage) {
 // ════════════════════════════════════════
 const AppContext = createContext(null);
 
-const MEMBERS = [
-  { id: "m1", name: "Boomer", avatar: "BO", tag: "1711", joinDate: "2025-01-15", admin: true },
-  { id: "m2", name: "Keaton", avatar: "KE", tag: "3916", joinDate: "2025-01-15" },
-  { id: "m3", name: "Ryan", avatar: "RY", tag: "0842", joinDate: "2025-01-20" },
-  { id: "m4", name: "Tripp", avatar: "TR", tag: "5523", joinDate: "2025-02-01" },
-  { id: "m5", name: "Evan", avatar: "EV", tag: "7704", joinDate: "2025-02-01" },
-  { id: "m6", name: "Grace", avatar: "GR", tag: "2244", joinDate: "2025-02-19" },
-];
+// Members are now loaded from Supabase profiles.
+// These empty defaults are used before data loads; once loaded, use data.members.
+const MEMBERS = [];
+const ALL_USERS = [];
 
-// Discoverable users (not in your fireteam by default — findable via search)
-const ALL_USERS = [
-  ...MEMBERS,
-  { id: "u1", name: "Silas", avatar: "SI", tag: "4490", joinDate: "2025-03-01" },
-  { id: "u2", name: "Ezra", avatar: "EZ", tag: "1689", joinDate: "2025-03-05" },
-  { id: "u3", name: "Lydia", avatar: "LY", tag: "6631", joinDate: "2025-03-10" },
-  { id: "u4", name: "Caleb", avatar: "CA", tag: "8812", joinDate: "2025-04-01" },
-  { id: "u5", name: "Naomi", avatar: "NA", tag: "3317", joinDate: "2025-04-12" },
-  { id: "u6", name: "Micah", avatar: "MI", tag: "5509", joinDate: "2025-05-01" },
-  { id: "u7", name: "Ruth", avatar: "RU", tag: "2103", joinDate: "2025-05-15" },
-  { id: "u8", name: "Josiah", avatar: "JO", tag: "9271", joinDate: "2025-06-01" },
-];
+// Helper to look up a member from the data.members array
+function findMember(data, id) {
+  return (data?.members || []).find(m => m.id === id) || { id, name: "Unknown", avatar: "??", tag: "0000" };
+}
+function getMembers(data) {
+  return data?.members || [];
+}
+function getAllUsers(data) {
+  return data?.members || [];
+}
 
 const CATEGORIES = [
   "Systematic Theology", "Biblical Theology", "Church History",
@@ -148,33 +144,10 @@ const DAILY_VERSES = [
 ];
 
 function getSeedData() {
-  // ── Data Schema ──
-  // books[]              - Library catalog
-  // readingProgress{}    - { userId: { bookId: pagesRead } }
-  // reviews[]            - Book reviews with ratings
-  // threads[]            - Forum threads with nested posts[]
-  // recommendations[]    - Book recs to the group
-  // activities[]         - Activity feed entries
-  // equippedTitles{}     - { userId: sealName }
-  // completedSeals{}     - { userId: [sealId, ...] }
-  // triumphProgress{}    - { userId: { triumphId: count } } — manual/custom triumphs only
-  // groupChallenges[]    - Admin-created group challenges
-  // readInvites[]        - Group read invitations
-  // bibleProgress{}      - { userId: { bookName: [chapters] } }
-  // prestigeLevel{}      - { userId: level }
-  // customSeals[]        - Admin-created seal definitions
-  // pinnedThreads[]      - Thread IDs pinned by admin
-  // displayNames{}       - { userId: customName }
-  // friendRequests[]     - { id, fromId, toId, date, status }
-  // friends{}            - { userId: [friendId, ...] }
-  const readingProgress = {};
-  MEMBERS.forEach(m => {
-    readingProgress[m.id] = {};
-  });
-
   return {
-    books: SEED_BOOKS,
-    readingProgress,
+    members: [],
+    books: [],
+    readingProgress: {},
     reviews: [],
     threads: [],
     recommendations: [],
@@ -182,9 +155,7 @@ function getSeedData() {
     equippedTitles: {},
     completedSeals: {},
     triumphProgress: {},
-    groupChallenges: [
-      { id: "gc1", name: "Read 12 Theology Books", description: "Read 12 theology books as a fireteam", target: 12, type: "books", year: 2026, active: true },
-    ],
+    groupChallenges: [],
     readInvites: [],
     bibleProgress: {},
     prestigeLevel: {},
@@ -192,14 +163,7 @@ function getSeedData() {
     pinnedThreads: [],
     displayNames: {},
     friendRequests: [],
-    friends: {
-      m1: ["m2", "m3", "m4", "m5"],
-      m2: ["m1", "m3", "m4", "m5"],
-      m3: ["m1", "m2", "m4", "m5"],
-      m4: ["m1", "m2", "m3", "m5"],
-      m5: ["m1", "m2", "m3", "m4"],
-      m6: [],
-    },
+    friends: {},
   };
 }
 
@@ -1304,7 +1268,7 @@ function HomePage() {
   const myReviews = data.reviews.filter(r => r.memberId === currentUser.id);
   const totalPages = Object.values(data.readingProgress?.[currentUser.id] || {}).reduce((s, v) => s + v, 0);
 
-  const groupCompleted = MEMBERS.reduce((acc, m) => {
+  const groupCompleted = getMembers(data).reduce((acc, m) => {
     const prg = data.readingProgress?.[m.id] || {};
     Object.keys(prg).forEach(bId => {
       const book = data.books.find(b => b.id === bId);
@@ -1314,7 +1278,7 @@ function HomePage() {
   }, 0);
 
   const groupReviewsCount = data.reviews.length;
-  const groupPagesCount = MEMBERS.reduce((acc, m) => {
+  const groupPagesCount = getMembers(data).reduce((acc, m) => {
     return acc + Object.values(data.readingProgress?.[m.id] || {}).reduce((s, v) => s + v, 0);
   }, 0);
 
@@ -1422,7 +1386,7 @@ function HomePage() {
           <div className="invite-cards-grid">
             {pendingInvites.map(inv => {
               const book = data.books.find(b => b.id === inv.bookId);
-              const from = MEMBERS.find(m => m.id === inv.fromId);
+              const from = findMember(data, inv.fromId);
               const othersAccepted = inv.acceptedIds.length;
               return (
                 <Panel key={inv.id} className="invite-card" glow="#2B9EB3">
@@ -1566,7 +1530,7 @@ function HomePage() {
                 <div style={{ color: "#33302A", fontSize: 12, marginTop: 4 }}>Start reading, writing reviews, or posting in the forum</div>
               </div>
             ) : [...data.activities].reverse().slice(0, 8).map(a => {
-              const member = MEMBERS.find(m => m.id === a.memberId);
+              const member = findMember(data, a.memberId);
               const mName = member ? (data.displayNames?.[member.id] || member.name) : "Unknown";
               return (
                 <div key={a.id} className="activity-item">
@@ -1593,7 +1557,7 @@ function HomePage() {
           <div className="rec-grid">
             {data.recommendations.map(rec => {
               const book = data.books.find(b => b.id === rec.bookId);
-              const member = MEMBERS.find(m => m.id === rec.memberId);
+              const member = findMember(data, rec.memberId);
               return (
                 <Panel key={rec.id} className="rec-card">
                   <div className="rec-book-cover">{book ? <BookCover book={book} size={36} /> : "?"}</div>
@@ -2026,7 +1990,7 @@ function TriumphsPage() {
         <div className="members-grid">
           {(() => {
             const myFriends = data.friends?.[currentUser.id] || [];
-            const fireteam = ALL_USERS.filter(m => myFriends.includes(m.id));
+            const fireteam = getAllUsers(data).filter(m => myFriends.includes(m.id));
             if (fireteam.length === 0) return (
               <Panel>
                 <div style={{ textAlign: "center", padding: "32px 20px" }}>
@@ -2311,7 +2275,7 @@ function LibraryPage() {
       readInvites: [...(d.readInvites || []), invite],
       activities: [...d.activities, {
         id: `a${Date.now()}`, type: "invite", memberId: currentUser.id,
-        text: `invited ${inviteMembers.map(id => MEMBERS.find(m => m.id === id)?.name).join(", ")} to read "${selectedBook.title}"`,
+        text: `invited ${inviteMembers.map(id => findMember(data, id)?.name).join(", ")} to read "${selectedBook.title}"`,
         date: invite.date, icon: "↗",
       }],
     }));
@@ -2356,7 +2320,7 @@ function LibraryPage() {
 
   if (selectedGroupRead && activeInvite && grBook) {
     const allParticipants = [activeInvite.fromId, ...activeInvite.acceptedIds];
-    const from = MEMBERS.find(m => m.id === activeInvite.fromId);
+    const from = findMember(data, activeInvite.fromId);
     const messages = activeInvite.messages || [];
 
     return (
@@ -2394,7 +2358,7 @@ function LibraryPage() {
         </div>
         <div className="gr-participants-row">
           {allParticipants.map(pId => {
-            const member = MEMBERS.find(m => m.id === pId);
+            const member = findMember(data, pId);
             if (!member) return null;
             const pg = data.readingProgress?.[pId]?.[grBook.id] || 0;
             const pct = Math.round((pg / grBook.pages) * 100);
@@ -2431,7 +2395,7 @@ function LibraryPage() {
               </div>
             )}
             {messages.map((msg, i) => {
-              const author = MEMBERS.find(m => m.id === msg.authorId);
+              const author = findMember(data, msg.authorId);
               const isOwn = msg.authorId === currentUser.id;
               const prevSameAuthor = i > 0 && messages[i - 1].authorId === msg.authorId;
               return (
@@ -2494,7 +2458,7 @@ function LibraryPage() {
               const book = data.books.find(b => b.id === inv.bookId);
               if (!book) return null;
               const allParticipants = [inv.fromId, ...inv.acceptedIds];
-              const from = MEMBERS.find(m => m.id === inv.fromId);
+              const from = findMember(data, inv.fromId);
               return (
                 <Panel key={inv.id} className="group-read-card" glow="#2B9EB3">
                   <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
@@ -2514,7 +2478,7 @@ function LibraryPage() {
                   )}
                   <div className="group-read-participants">
                     {allParticipants.map(pId => {
-                      const member = MEMBERS.find(m => m.id === pId);
+                      const member = findMember(data, pId);
                       if (!member) return null;
                       const pg = data.readingProgress?.[pId]?.[book.id] || 0;
                       const pct = Math.round((pg / book.pages) * 100);
@@ -2536,7 +2500,7 @@ function LibraryPage() {
                     })}
                     {inv.invitedIds.filter(id => !inv.acceptedIds.includes(id) && !inv.declinedIds.includes(id)).length > 0 && (
                       <div style={{ color: "#4A4235", fontSize: 11, fontStyle: "italic", marginTop: 6 }}>
-                        ⏳ Waiting on {inv.invitedIds.filter(id => !inv.acceptedIds.includes(id) && !inv.declinedIds.includes(id)).map(id => MEMBERS.find(m => m.id === id)?.name).join(", ")}
+                        ⏳ Waiting on {inv.invitedIds.filter(id => !inv.acceptedIds.includes(id) && !inv.declinedIds.includes(id)).map(id => findMember(data, id)?.name).join(", ")}
                       </div>
                     )}
                   </div>
@@ -2575,7 +2539,7 @@ function LibraryPage() {
         <div className="fireteam-reading">
           <div className="section-title" style={{ marginBottom: 16 }}>FIRETEAM READING PROGRESS</div>
           {data.books.filter(b => {
-            return MEMBERS.some(m => (data.readingProgress?.[m.id]?.[b.id] || 0) > 0);
+            return getMembers(data).some(m => (data.readingProgress?.[m.id]?.[b.id] || 0) > 0);
           }).map(book => (
             <Panel key={book.id} style={{ marginBottom: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
@@ -2586,7 +2550,7 @@ function LibraryPage() {
                 </div>
               </div>
               <div className="fireteam-members-grid">
-                {MEMBERS.filter(m => (data.readingProgress?.[m.id]?.[book.id] || 0) > 0).map(m => {
+                {getMembers(data).filter(m => (data.readingProgress?.[m.id]?.[book.id] || 0) > 0).map(m => {
                   const pg = data.readingProgress?.[m.id]?.[book.id] || 0;
                   const pct = Math.round((pg / book.pages) * 100);
                   return (
@@ -2704,7 +2668,7 @@ function LibraryPage() {
 
             <label className="input-label">Select Fireteam Members</label>
             <div className="invite-members-list">
-              {MEMBERS.filter(m => m.id !== currentUser.id).map(m => {
+              {getMembers(data).filter(m => m.id !== currentUser.id).map(m => {
                 const selected = inviteMembers.includes(m.id);
                 return (
                   <div
@@ -2878,7 +2842,7 @@ function ReviewsPage() {
           </Panel>
         ) : reviews.map(review => {
           const book = data.books.find(b => b.id === review.bookId);
-          const member = MEMBERS.find(m => m.id === review.memberId);
+          const member = findMember(data, review.memberId);
           return (
             <Panel key={review.id} className="review-card">
               <div className="review-header">
@@ -3039,7 +3003,7 @@ function ForumPage() {
               </div>
             )}
             <div style={{ color: "#6B6152", fontSize: 12 }}>
-              Started by {MEMBERS.find(m => m.id === thread.authorId)?.name} · {thread.date}
+              Started by {findMember(data, thread.authorId)?.name} · {thread.date}
             </div>
             {isAdmin && (
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
@@ -3056,7 +3020,7 @@ function ForumPage() {
 
         <div className="thread-posts">
           {thread.posts.map((post, i) => {
-            const author = MEMBERS.find(m => m.id === post.authorId);
+            const author = findMember(data, post.authorId);
             return (
               <Panel key={post.id} className="post-card" style={{ marginTop: 12 }}>
                 <div className="post-header">
@@ -3125,9 +3089,9 @@ function ForumPage() {
             </div>
           </Panel>
         ) : threads.sort((a, b) => b.date.localeCompare(a.date)).map(thread => {
-          const author = MEMBERS.find(m => m.id === thread.authorId);
+          const author = findMember(data, thread.authorId);
           const lastPost = thread.posts[thread.posts.length - 1];
-          const lastAuthor = MEMBERS.find(m => m.id === lastPost?.authorId);
+          const lastAuthor = findMember(data, lastPost?.authorId);
           return (
             <Panel key={thread.id} className="thread-card" onClick={() => setSelectedThread(thread.id)}>
               <div className="thread-card-top">
@@ -3227,13 +3191,13 @@ function MembersPage() {
     return { booksCompleted, pagesRead, reviewsWritten, threadsStarted, replies, sealsEarned };
   }
 
-  const friendMembers = ALL_USERS.filter(m => myFriends.includes(m.id));
+  const friendMembers = getAllUsers(data).filter(m => myFriends.includes(m.id));
   const ranked = friendMembers.map(m => ({ ...m, stats: getMemberStats(m.id) })).sort((a, b) => b.stats.booksCompleted - a.stats.booksCompleted);
 
   // Search: exclude self, current friends, and users with pending outgoing requests
   const outgoingIds = outgoingRequests.map(r => r.toId);
   const searchResults = searchQuery.trim().length > 0
-    ? ALL_USERS.filter(u => {
+    ? getAllUsers(data).filter(u => {
         if (u.id === currentUser.id) return false;
         if (myFriends.includes(u.id)) return false;
         const q = searchQuery.toLowerCase().trim();
@@ -3243,7 +3207,7 @@ function MembersPage() {
     : [];
 
   function sendFriendRequest(userId) {
-    const userName = ALL_USERS.find(u => u.id === userId)?.name;
+    const userName = findMember(data, userId)?.name;
     setData(d => ({
       ...d,
       friendRequests: [...(d.friendRequests || []), {
@@ -3260,7 +3224,7 @@ function MembersPage() {
   function acceptFriendRequest(requestId) {
     const req = friendRequests.find(r => r.id === requestId);
     if (!req) return;
-    const fromName = ALL_USERS.find(u => u.id === req.fromId)?.name;
+    const fromName = findMember(data, req.fromId)?.name;
     setData(d => {
       const friends = { ...(d.friends || {}) };
       const myList = [...(friends[currentUser.id] || [])];
@@ -3277,7 +3241,7 @@ function MembersPage() {
         ),
         activities: [...d.activities, {
           id: `a${Date.now()}`, type: "friend_add", memberId: currentUser.id,
-          text: `and ${ALL_USERS.find(u => u.id === req.fromId)?.name} are now fireteam members`,
+          text: `and ${findMember(data, req.fromId)?.name} are now fireteam members`,
           date: new Date().toISOString().split("T")[0], icon: "★",
         }],
       };
@@ -3304,7 +3268,7 @@ function MembersPage() {
   }
 
   function removeFriend(userId) {
-    const friendName = ALL_USERS.find(u => u.id === userId)?.name;
+    const friendName = findMember(data, userId)?.name;
     setData(d => {
       const friends = { ...(d.friends || {}) };
       friends[currentUser.id] = (friends[currentUser.id] || []).filter(id => id !== userId);
@@ -3359,7 +3323,7 @@ function MembersPage() {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {incomingRequests.map(req => {
-              const fromUser = ALL_USERS.find(u => u.id === req.fromId);
+              const fromUser = findMember(data, req.fromId);
               if (!fromUser) return null;
               return (
                 <Panel key={req.id} className="friend-search-result" glow="#2B9EB3">
@@ -3548,7 +3512,7 @@ function MembersPage() {
       <Modal open={!!showRemoveConfirm} onClose={() => setShowRemoveConfirm(null)} title="Remove Friend">
         <div style={{ padding: 20, textAlign: "center" }}>
           {(() => {
-            const friend = ALL_USERS.find(u => u.id === showRemoveConfirm);
+            const friend = findMember(data, showRemoveConfirm);
             if (!friend) return null;
             return (
               <>
@@ -4251,7 +4215,7 @@ function DirectorPage() {
 function ProfilePage() {
   const { data, setData, currentUser, profileTarget, setPage, showToast, logout } = useContext(AppContext);
   const memberId = profileTarget || currentUser.id;
-  const member = ALL_USERS.find(m => m.id === memberId);
+  const member = findMember(data, memberId);
   const isOwn = memberId === currentUser.id;
   const [showSettings, setShowSettings] = useState(false);
   const [editName, setEditName] = useState("");
@@ -4276,9 +4240,6 @@ function ProfilePage() {
       ...d,
       displayNames: { ...(d.displayNames || {}), [memberId]: trimmed },
     }));
-    // Also update the stored currentUser so it persists on reload
-    const updatedUser = { ...currentUser, name: trimmed };
-    window.storage.set("current-user-1711s-v10", JSON.stringify(updatedUser)).catch(() => {});
     setShowSettings(false);
     showToast("Display name updated");
   }
@@ -5626,8 +5587,192 @@ select.text-input { cursor: pointer; }
 .seal-card:nth-child(6) { animation-delay: 0.3s; }
 `;
 
+function AuthScreen() {
+  const [mode, setMode] = useState("login"); // "login" or "signup"
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [confirmSent, setConfirmSent] = useState(false);
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) setError(error.message);
+    setLoading(false);
+  }
+
+  async function handleSignup(e) {
+    e.preventDefault();
+    setError(null);
+    if (!displayName.trim()) { setError("Display name is required"); return; }
+    if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
+    setLoading(true);
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { display_name: displayName.trim() },
+      },
+    });
+    if (error) {
+      setError(error.message);
+    } else {
+      setConfirmSent(true);
+    }
+    setLoading(false);
+  }
+
+  if (confirmSent) {
+    return (
+      <>
+        <style>{STYLES}</style>
+        <div className="login-screen">
+          <div className="login-logo">17:11s</div>
+          <div className="login-tagline">Examining the Scriptures Daily</div>
+          <div className="login-diamond">◆</div>
+          <div style={{
+            background: "var(--panel-bg)", border: "1px solid var(--border-subtle)",
+            borderRadius: 6, padding: "32px 24px", maxWidth: 400, width: "100%", textAlign: "center",
+          }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>✉</div>
+            <div style={{ color: "#E8E0D0", fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+              Check your email
+            </div>
+            <div style={{ color: "#8A7E6B", fontSize: 14, lineHeight: 1.6, marginBottom: 20 }}>
+              We sent a confirmation link to <span style={{ color: "#D4AF37" }}>{email}</span>.
+              Click the link to activate your account, then come back here to sign in.
+            </div>
+            <button
+              className="gold-btn"
+              style={{ width: "100%", justifyContent: "center" }}
+              onClick={() => { setConfirmSent(false); setMode("login"); }}
+            >
+              Back to Sign In
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <style>{STYLES}</style>
+      <div className="login-screen">
+        <div className="login-logo">17:11s</div>
+        <div className="login-tagline">Examining the Scriptures Daily</div>
+        <div className="login-diamond">◆</div>
+
+        <div style={{
+          background: "var(--panel-bg)", border: "1px solid var(--border-subtle)",
+          borderRadius: 6, padding: "28px 24px", maxWidth: 400, width: "100%",
+        }}>
+          {/* Tab switcher */}
+          <div style={{ display: "flex", gap: 0, marginBottom: 24, borderBottom: "1px solid #2A2520" }}>
+            <button
+              onClick={() => { setMode("login"); setError(null); }}
+              style={{
+                flex: 1, background: "none", border: "none", padding: "10px 0",
+                color: mode === "login" ? "#D4AF37" : "#6B6152",
+                fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: 13,
+                letterSpacing: 2, cursor: "pointer",
+                borderBottom: mode === "login" ? "2px solid #D4AF37" : "2px solid transparent",
+                transition: "all 0.25s",
+              }}
+            >
+              SIGN IN
+            </button>
+            <button
+              onClick={() => { setMode("signup"); setError(null); }}
+              style={{
+                flex: 1, background: "none", border: "none", padding: "10px 0",
+                color: mode === "signup" ? "#D4AF37" : "#6B6152",
+                fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: 13,
+                letterSpacing: 2, cursor: "pointer",
+                borderBottom: mode === "signup" ? "2px solid #D4AF37" : "2px solid transparent",
+                transition: "all 0.25s",
+              }}
+            >
+              CREATE ACCOUNT
+            </button>
+          </div>
+
+          <form onSubmit={mode === "login" ? handleLogin : handleSignup}>
+            {mode === "signup" && (
+              <>
+                <label className="input-label">Guardian Name</label>
+                <input
+                  className="text-input"
+                  type="text"
+                  value={displayName}
+                  onChange={e => setDisplayName(e.target.value)}
+                  placeholder="Your display name"
+                  autoComplete="name"
+                />
+              </>
+            )}
+
+            <label className="input-label">Email</label>
+            <input
+              className="text-input"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              required
+            />
+
+            <label className="input-label">Password</label>
+            <input
+              className="text-input"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder={mode === "signup" ? "At least 6 characters" : "Your password"}
+              autoComplete={mode === "signup" ? "new-password" : "current-password"}
+              required
+            />
+
+            {error && (
+              <div style={{
+                color: "#C0392B", fontSize: 13, marginTop: 12, padding: "8px 12px",
+                background: "rgba(192,57,43,0.08)", borderRadius: 4,
+                border: "1px solid rgba(192,57,43,0.2)",
+              }}>
+                {error}
+              </div>
+            )}
+
+            <button
+              className="gold-btn"
+              type="submit"
+              disabled={loading}
+              style={{
+                width: "100%", justifyContent: "center", marginTop: 20,
+                opacity: loading ? 0.6 : 1, pointerEvents: loading ? "none" : "auto",
+              }}
+            >
+              {loading ? "Please wait..." : mode === "login" ? "Sign In" : "Create Account"}
+            </button>
+          </form>
+        </div>
+
+        <div style={{ color: "#4A4235", fontSize: 12, marginTop: 24, letterSpacing: 1 }}>
+          ACTS 17:11 · EXAMINING THE SCRIPTURES DAILY
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [page, setPage] = useState("home");
   const [data, setData] = useState(null);
   const [profileTarget, setProfileTarget] = useState(null);
@@ -5642,45 +5787,107 @@ export default function App() {
     toastTimeout.current = setTimeout(() => setToast(null), 3000);
   }
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const stored = await window.storage.get("app-data-1711s-v10");
-        if (stored) {
-          setData(JSON.parse(stored.value));
-        } else {
-          const seed = getSeedData();
-          setData(seed);
-          await window.storage.set("app-data-1711s-v10", JSON.stringify(seed));
-        }
-      } catch {
-        setData(getSeedData());
-      }
-      try {
-        const user = await window.storage.get("current-user-1711s-v10");
-        if (user) setCurrentUser(JSON.parse(user.value));
-      } catch {}
-      setLoading(false);
+  // ── Fetch profile from Supabase ──
+  async function fetchProfile(userId) {
+    const { data: prof, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .single();
+    if (error) {
+      console.error("Error fetching profile:", error);
+      return null;
     }
-    load();
+    return prof;
+  }
+
+  // ── Auth state listener ──
+  useEffect(() => {
+    // Check current session on mount
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const prof = await fetchProfile(session.user.id);
+        if (prof) {
+          setCurrentUser({
+            id: prof.id,
+            name: prof.display_name,
+            avatar: prof.avatar,
+            tag: prof.tag,
+            admin: prof.is_admin,
+          });
+          setProfile(prof);
+        }
+      }
+      setLoading(false);
+    });
+
+    // Listen for auth changes (login, logout, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === "SIGNED_IN" && session?.user) {
+          const prof = await fetchProfile(session.user.id);
+          if (prof) {
+            setCurrentUser({
+              id: prof.id,
+              name: prof.display_name,
+              avatar: prof.avatar,
+              tag: prof.tag,
+              admin: prof.is_admin,
+            });
+            setProfile(prof);
+          }
+        } else if (event === "SIGNED_OUT") {
+          setCurrentUser(null);
+          setProfile(null);
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
+  // ── Load app data from Supabase (only after auth) ──
+  const dataRef = useRef(null);
+
   useEffect(() => {
-    if (data) {
-      window.storage.set("app-data-1711s-v10", JSON.stringify(data)).catch(() => {});
+    if (!currentUser) return;
+    async function loadData() {
+      try {
+        console.log("Loading data from Supabase...");
+        const allData = await loadAllData();
+        console.log("Data loaded:", Object.keys(allData));
+        setData(allData);
+        dataRef.current = allData;
+      } catch (err) {
+        console.error("Error loading data:", err);
+        const fallback = getSeedData();
+        setData(fallback);
+        dataRef.current = fallback;
+      }
     }
-  }, [data]);
+    loadData();
+  }, [currentUser]);
 
-  async function login(member) {
-    setCurrentUser(member);
-    await window.storage.set("current-user-1711s-v10", JSON.stringify(member)).catch(() => {});
+  // Wrap setData to auto-sync changes to Supabase
+  function setDataSynced(updater) {
+    setData(prev => {
+      const newVal = typeof updater === "function" ? updater(prev) : updater;
+      const oldSnapshot = dataRef.current;
+      dataRef.current = newVal;
+      // Async sync — don't block the UI
+      if (oldSnapshot) syncChanges(oldSnapshot, newVal);
+      return newVal;
+    });
   }
 
-  function logout() {
+  // ── Logout ──
+  async function logout() {
+    await supabase.auth.signOut();
     setCurrentUser(null);
-    window.storage.delete("current-user-1711s-v10").catch(() => {});
+    setProfile(null);
   }
 
+  // ── Loading state ──
   if (loading) {
     return (
       <>
@@ -5693,28 +5900,26 @@ export default function App() {
     );
   }
 
+  // ── Not logged in → show auth screen ──
   if (!currentUser) {
+    return <AuthScreen />;
+  }
+
+  // ── Wait for data to load ──
+  if (!data) {
     return (
       <>
         <style>{STYLES}</style>
         <div className="login-screen">
-          <div className="login-logo">17:11s</div>
-          <div className="login-tagline">Examining the Scriptures Daily</div>
-          <div className="login-diamond">◆</div>
-          <div className="login-subtitle">SELECT YOUR GUARDIAN</div>
-          <div className="login-grid">
-            {MEMBERS.map(m => (
-              <button key={m.id} className="login-btn" onClick={() => login(m)}>
-                <div className="avatar">{m.avatar}</div>
-                <span>{m.name}</span>
-                <span style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 10, color: "#4A4235", letterSpacing: 0.5 }}>#{m.tag}</span>
-              </button>
-            ))}
-          </div>
+          <div className="login-logo" style={{ animation: "pulse 2s infinite" }}>17:11s</div>
+          <div style={{ color: "#6B6152", marginTop: 16 }}>Loading data...</div>
         </div>
       </>
     );
   }
+
+  // ═══ Everything below here is the same as your current code ═══
+  // (NAV array, isAdmin, ctx, navTo, and the full return with header/pages/footer)
 
   const NAV = [
     { id: "home", label: "Orbit", icon: <Flame size={14} /> },
@@ -5727,7 +5932,7 @@ export default function App() {
   ];
 
   const isAdmin = currentUser?.admin === true;
-  const ctx = { data, setData, currentUser, page, setPage, profileTarget, setProfileTarget, isAdmin, showToast, logout };
+  const ctx = { data, setData: setDataSynced, currentUser, page, setPage, profileTarget, setProfileTarget, isAdmin, showToast, logout };
 
   function navTo(id) {
     setPage(id);
