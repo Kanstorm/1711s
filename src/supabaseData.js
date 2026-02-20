@@ -40,7 +40,7 @@ export async function loadAllData() {
   // Reading progress
   const rpObj = {}; readingProgress.forEach(rp => { if (!rpObj[rp.user_id]) rpObj[rp.user_id] = {}; rpObj[rp.user_id][rp.book_id] = rp.pages_read; });
   // Reviews
-  const reviewsArr = reviews.map(r => ({ id: r.id, bookId: r.book_id, memberId: r.user_id, rating: r.rating, text: r.body, date: r.created_at?.split("T")[0] || "" }));
+  const reviewsArr = reviews.map(r => ({ id: r.id, bookId: r.book_id, memberId: r.user_id, rating: r.rating, text: r.body, date: r.created_at?.split("T")[0] || "", likes: r.likes || [] }));
   // Threads + posts
   const postsMap = {}; posts.forEach(p => { if (!postsMap[p.thread_id]) postsMap[p.thread_id] = []; postsMap[p.thread_id].push({ id: p.id, authorId: p.author_id, text: p.body, date: p.created_at?.split("T")[0] || "" }); });
   const threadsArr = threads.map(t => ({ id: t.id, title: t.title, category: t.category, authorId: t.author_id, bookId: t.book_id, date: t.created_at?.split("T")[0] || "", posts: postsMap[t.id] || [] }));
@@ -87,7 +87,7 @@ export async function syncChanges(oldData, newData) {
     for (const uid of Object.keys(newData.readingProgress || {})) { const o = oldData.readingProgress?.[uid] || {}, n = newData.readingProgress[uid] || {}; for (const bid of Object.keys(n)) { if (n[bid] !== o[bid]) p.push(supabase.from("reading_progress").upsert({ user_id: uid, book_id: bid, pages_read: n[bid], updated_at: new Date().toISOString() })); } }
     // Reviews add/delete
     const oldRvIds = new Set(oldData.reviews.map(r => r.id)), newRvIds = new Set(newData.reviews.map(r => r.id));
-    for (const r of newData.reviews) { if (!oldRvIds.has(r.id)) p.push(supabase.from("reviews").insert({ user_id: r.memberId, book_id: r.bookId, rating: r.rating, body: r.text }).select().single().then(({ data: s }) => { if (s) r.id = s.id; })); }
+    for (const r of newData.reviews) { if (!oldRvIds.has(r.id)) p.push(supabase.from("reviews").insert({ user_id: r.memberId, book_id: r.bookId, rating: r.rating, body: r.text, likes: r.likes || [] }).select().single().then(({ data: s }) => { if (s) r.id = s.id; })); }
     for (const r of oldData.reviews) { if (!newRvIds.has(r.id)) p.push(supabase.from("reviews").delete().eq("id", r.id)); }
     // Threads add/delete + posts
     const oldThIds = new Set(oldData.threads.map(t => t.id)), newThIds = new Set(newData.threads.map(t => t.id));
