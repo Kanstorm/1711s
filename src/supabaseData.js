@@ -10,7 +10,7 @@ async function q(table, options = {}) {
 
 export async function loadAllData() {
   console.log("loadAllData: fetching from Supabase...");
-  const [books, profiles, readingProgress, reviews, threads, posts, recommendations, activities, friendships, friendRequests, customSeals, customTriumphs, completedSeals, triumphProgress, groupChallenges, groupReads, groupReadMembers, groupReadMessages, bibleProgress] = await Promise.all([
+  const [books, profiles, readingProgress, reviews, threads, posts, recommendations, activities, friendships, friendRequests, customSeals, customTriumphs, completedSeals, triumphProgress, groupChallenges, groupReads, groupReadMembers, groupReadMessages, bibleProgress, reviewLikes] = await Promise.all([
     q("books", { order: "created_at" }),
     q("profiles"),
     q("reading_progress"),
@@ -30,6 +30,7 @@ export async function loadAllData() {
     q("group_read_members"),
     q("group_read_messages", { order: "created_at" }),
     q("bible_progress"),
+    q("review_likes"),
   ]);
   console.log("loadAllData: all queries complete.", { books: books.length, profiles: profiles.length });
 
@@ -40,7 +41,9 @@ export async function loadAllData() {
   // Reading progress
   const rpObj = {}; readingProgress.forEach(rp => { if (!rpObj[rp.user_id]) rpObj[rp.user_id] = {}; rpObj[rp.user_id][rp.book_id] = rp.pages_read; });
   // Reviews
-  const reviewsArr = reviews.map(r => ({ id: r.id, bookId: r.book_id, memberId: r.user_id, rating: r.rating, text: r.body, date: r.created_at?.split("T")[0] || "", likes: r.likes || [] }));
+  const reviewsArr = reviews.map(r => ({ id: r.id, bookId: r.book_id, memberId: r.user_id, rating: r.rating, text: r.body, date: r.created_at?.split("T")[0] || "" }));
+  // Review likes: { reviewId: [userId, userId, ...] }
+  const reviewLikesObj = {}; reviewLikes.forEach(rl => { if (!reviewLikesObj[rl.review_id]) reviewLikesObj[rl.review_id] = []; reviewLikesObj[rl.review_id].push(rl.user_id); });
   // Threads + posts
   const postsMap = {}; posts.forEach(p => { if (!postsMap[p.thread_id]) postsMap[p.thread_id] = []; postsMap[p.thread_id].push({ id: p.id, authorId: p.author_id, text: p.body, date: p.created_at?.split("T")[0] || "" }); });
   const threadsArr = threads.map(t => ({ id: t.id, title: t.title, category: t.category, authorId: t.author_id, bookId: t.book_id, date: t.created_at?.split("T")[0] || "", posts: postsMap[t.id] || [] }));
@@ -72,7 +75,7 @@ export async function loadAllData() {
   profiles.forEach(p => { displayNamesObj[p.id] = p.display_name; if (p.equipped_title) equippedTitlesObj[p.id] = p.equipped_title; if (p.prestige_level > 0) prestigeObj[p.id] = p.prestige_level; });
   const pinnedThreadIds = threads.filter(t => t.is_pinned).map(t => t.id);
 
-  return { members: membersArr, books: booksArr, readingProgress: rpObj, reviews: reviewsArr, threads: threadsArr, recommendations: recsArr, activities: activitiesArr, equippedTitles: equippedTitlesObj, completedSeals: completedSealsObj, triumphProgress: tpObj, groupChallenges: gcArr, readInvites: readInvitesArr, bibleProgress: bpObj, prestigeLevel: prestigeObj, customSeals: customSealsArr, pinnedThreads: pinnedThreadIds, displayNames: displayNamesObj, friendRequests: frArr, friends: friendsObj };
+  return { members: membersArr, books: booksArr, readingProgress: rpObj, reviews: reviewsArr, threads: threadsArr, recommendations: recsArr, activities: activitiesArr, equippedTitles: equippedTitlesObj, completedSeals: completedSealsObj, triumphProgress: tpObj, groupChallenges: gcArr, readInvites: readInvitesArr, bibleProgress: bpObj, prestigeLevel: prestigeObj, customSeals: customSealsArr, pinnedThreads: pinnedThreadIds, displayNames: displayNamesObj, friendRequests: frArr, friends: friendsObj, reviewLikes: reviewLikesObj };
 }
 
 // Sync: diff old→new, write changes to Supabase
@@ -85,9 +88,9 @@ export async function syncChanges(oldData, newData) {
     for (const b of newData.books) { if (!oldBkIds.has(b.id)) p.push(supabase.from("books").insert({ title: b.title, author: b.author, category: b.category, pages: b.pages, cover_url: b.coverUrl || null }).select().single().then(({ data: s }) => { if (s) b.id = s.id; })); }
     // Reading progress
     for (const uid of Object.keys(newData.readingProgress || {})) { const o = oldData.readingProgress?.[uid] || {}, n = newData.readingProgress[uid] || {}; for (const bid of Object.keys(n)) { if (n[bid] !== o[bid]) p.push(supabase.from("reading_progress").upsert({ user_id: uid, book_id: bid, pages_read: n[bid], updated_at: new Date().toISOString() })); } }
-    // Reviews add/delete/likes
+    // Reviews add/delete
     const oldRvIds = new Set(oldData.reviews.map(r => r.id)), newRvIds = new Set(newData.reviews.map(r => r.id));
-    for (const r of newData.reviews) { if (!oldRvIds.has(r.id)) p.push(supabase.from("reviews").insert({ user_id: r.memberId, book_id: r.bookId, rating: r.rating, body: r.text, likes: r.likes || [] }).select().single().then(({ data: s }) => { if (s) r.id = s.id; })); else { const or = oldData.reviews.find(x => x.id === r.id); if (or && JSON.stringify(or.likes || []) !== JSON.stringify(r.likes || [])) p.push(supabase.from("reviews").update({ likes: r.likes || [] }).eq("id", r.id)); } }
+    for (const r of newData.reviews) { if (!oldRvIds.has(r.id)) p.push(supabase.from("reviews").insert({ user_id: r.memberId, book_id: r.bookId, rating: r.rating, body: r.text }).select().single().then(({ data: s }) => { if (s) r.id = s.id; })); }
     for (const r of oldData.reviews) { if (!newRvIds.has(r.id)) p.push(supabase.from("reviews").delete().eq("id", r.id)); }
     // Threads add/delete + posts
     const oldThIds = new Set(oldData.threads.map(t => t.id)), newThIds = new Set(newData.threads.map(t => t.id));
