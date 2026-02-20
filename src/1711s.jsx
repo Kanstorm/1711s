@@ -161,7 +161,6 @@ function getSeedData() {
     prestigeLevel: {},
     customSeals: [],
     pinnedThreads: [],
-    reviewLikes: {},
     displayNames: {},
     friendRequests: [],
     friends: {},
@@ -3416,22 +3415,23 @@ function ReviewsPage() {
   const [newReview, setNewReview] = useState({ bookId: "", rating: 5, text: "" });
   const [confirmDelete, setConfirmDelete] = useState(null);
 
-  function getLikes(reviewId) {
-    return data.reviewLikes?.[reviewId] || [];
+  function getLikes(review) {
+    return review.likes || [];
   }
 
   function toggleLike(reviewId) {
-    setData(d => {
-      const likes = d.reviewLikes?.[reviewId] || [];
-      const already = likes.includes(currentUser.id);
-      return {
-        ...d,
-        reviewLikes: {
-          ...d.reviewLikes,
-          [reviewId]: already ? likes.filter(id => id !== currentUser.id) : [...likes, currentUser.id],
-        },
-      };
-    });
+    const review = data.reviews.find(r => r.id === reviewId);
+    if (!review) return;
+    const likes = review.likes || [];
+    const already = likes.includes(currentUser.id);
+    const newLikes = already ? likes.filter(id => id !== currentUser.id) : [...likes, currentUser.id];
+    setData(d => ({
+      ...d,
+      reviews: d.reviews.map(r => r.id === reviewId ? { ...r, likes: newLikes } : r),
+    }));
+    // Sync to Supabase directly
+    supabase.from("reviews").update({ likes: newLikes }).eq("id", reviewId)
+      .then(({ error }) => { if (error) console.error("Like sync error:", error); });
   }
 
   const reviews = data.reviews
@@ -3449,8 +3449,8 @@ function ReviewsPage() {
     })
     .sort((a, b) => {
       if (sortBy === "most_liked") {
-        const aLikes = (data.reviewLikes?.[a.id] || []).length;
-        const bLikes = (data.reviewLikes?.[b.id] || []).length;
+        const aLikes = (a.likes || []).length;
+        const bLikes = (b.likes || []).length;
         if (bLikes !== aLikes) return bLikes - aLikes;
       }
       return b.date.localeCompare(a.date);
@@ -3458,7 +3458,7 @@ function ReviewsPage() {
 
   function submitReview() {
     if (!newReview.bookId || !newReview.text) return;
-    const review = { ...newReview, id: `r${Date.now()}`, memberId: currentUser.id, date: new Date().toISOString().split("T")[0] };
+    const review = { ...newReview, id: `r${Date.now()}`, memberId: currentUser.id, date: new Date().toISOString().split("T")[0], likes: [] };
     setData(d => ({ ...d, reviews: [...d.reviews, review] }));
     setNewReview({ bookId: "", rating: 5, text: "" });
     setShowWrite(false);
@@ -3466,11 +3466,7 @@ function ReviewsPage() {
   }
 
   function deleteReview(reviewId) {
-    setData(d => {
-      const newLikes = { ...d.reviewLikes };
-      delete newLikes[reviewId];
-      return { ...d, reviews: d.reviews.filter(r => r.id !== reviewId), reviewLikes: newLikes };
-    });
+    setData(d => ({ ...d, reviews: d.reviews.filter(r => r.id !== reviewId) }));
     showToast("Review deleted", "info");
   }
 
@@ -3549,7 +3545,7 @@ function ReviewsPage() {
         ) : reviews.map(review => {
           const book = data.books.find(b => b.id === review.bookId);
           const member = findMember(data, review.memberId);
-          const likes = getLikes(review.id);
+          const likes = getLikes(review);
           const liked = likes.includes(currentUser.id);
           return (
             <Panel key={review.id} className="review-card">
