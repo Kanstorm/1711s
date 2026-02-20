@@ -3430,8 +3430,12 @@ function ReviewsPage() {
       reviews: d.reviews.map(r => r.id === reviewId ? { ...r, likes: newLikes } : r),
     }));
     // Sync to Supabase directly
-    supabase.from("reviews").update({ likes: newLikes }).eq("id", reviewId)
-      .then(({ error }) => { if (error) console.error("Like sync error:", error); });
+    supabase.from("reviews").update({ likes: newLikes }).eq("id", reviewId).select()
+      .then(({ data: rows, error }) => {
+        if (error) console.error("Like sync error:", error);
+        else if (!rows || rows.length === 0) console.warn("Like sync: no rows matched id", reviewId);
+        else console.log("Like synced:", reviewId, newLikes);
+      });
   }
 
   const reviews = data.reviews

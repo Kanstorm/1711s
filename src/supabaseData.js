@@ -85,9 +85,9 @@ export async function syncChanges(oldData, newData) {
     for (const b of newData.books) { if (!oldBkIds.has(b.id)) p.push(supabase.from("books").insert({ title: b.title, author: b.author, category: b.category, pages: b.pages, cover_url: b.coverUrl || null }).select().single().then(({ data: s }) => { if (s) b.id = s.id; })); }
     // Reading progress
     for (const uid of Object.keys(newData.readingProgress || {})) { const o = oldData.readingProgress?.[uid] || {}, n = newData.readingProgress[uid] || {}; for (const bid of Object.keys(n)) { if (n[bid] !== o[bid]) p.push(supabase.from("reading_progress").upsert({ user_id: uid, book_id: bid, pages_read: n[bid], updated_at: new Date().toISOString() })); } }
-    // Reviews add/delete
+    // Reviews add/delete/likes
     const oldRvIds = new Set(oldData.reviews.map(r => r.id)), newRvIds = new Set(newData.reviews.map(r => r.id));
-    for (const r of newData.reviews) { if (!oldRvIds.has(r.id)) p.push(supabase.from("reviews").insert({ user_id: r.memberId, book_id: r.bookId, rating: r.rating, body: r.text, likes: r.likes || [] }).select().single().then(({ data: s }) => { if (s) r.id = s.id; })); }
+    for (const r of newData.reviews) { if (!oldRvIds.has(r.id)) p.push(supabase.from("reviews").insert({ user_id: r.memberId, book_id: r.bookId, rating: r.rating, body: r.text, likes: r.likes || [] }).select().single().then(({ data: s }) => { if (s) r.id = s.id; })); else { const or = oldData.reviews.find(x => x.id === r.id); if (or && JSON.stringify(or.likes || []) !== JSON.stringify(r.likes || [])) p.push(supabase.from("reviews").update({ likes: r.likes || [] }).eq("id", r.id)); } }
     for (const r of oldData.reviews) { if (!newRvIds.has(r.id)) p.push(supabase.from("reviews").delete().eq("id", r.id)); }
     // Threads add/delete + posts
     const oldThIds = new Set(oldData.threads.map(t => t.id)), newThIds = new Set(newData.threads.map(t => t.id));
