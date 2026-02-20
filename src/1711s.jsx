@@ -3841,10 +3841,7 @@ function DirectorPage() {
     const oldLvl = data.prestigeLevel?.[currentUser.id] || 0;
     const newLvl = oldLvl + 1;
     setShowPrestigeConfirm(false);
-    // Start animation FIRST, then apply data change during animation
     setPrestigeAnim({ oldLevel: oldLvl, newLevel: newLvl });
-    // Delay the data update so the animation shows the old shape first
-    // First prestige (0→1) has shorter intro phase
     const delay = oldLvl === 0 ? 2100 : 2600;
     setTimeout(() => {
       setData(d => ({
@@ -3857,7 +3854,12 @@ function DirectorPage() {
           date: new Date().toISOString().split("T")[0], icon: "★",
         }],
       }));
-    }, delay); // Apply after explosion phase
+      // Write prestige directly to Supabase
+      supabase.from("bible_progress").delete().eq("user_id", currentUser.id)
+        .then(({ error }) => { if (error) console.error("Prestige clear error:", error); });
+      supabase.from("profiles").update({ prestige_level: newLvl }).eq("id", currentUser.id)
+        .then(({ error }) => { if (error) console.error("Prestige update error:", error); });
+    }, delay);
   }
 
   function getBookProgress(bookName, totalCh) {
@@ -3866,29 +3868,64 @@ function DirectorPage() {
   }
 
   function toggleChapter(bookName, chNum) {
+    const current = data.bibleProgress?.[currentUser.id]?.[bookName] || [];
+    const removing = current.includes(chNum);
+
+    // Update local state
     setData(d => {
       const userBp = { ...(d.bibleProgress?.[currentUser.id] || {}) };
-      const current = userBp[bookName] || [];
-      if (current.includes(chNum)) {
+      if (removing) {
         userBp[bookName] = current.filter(c => c !== chNum);
       } else {
         userBp[bookName] = [...current, chNum].sort((a, b) => a - b);
       }
       return { ...d, bibleProgress: { ...d.bibleProgress, [currentUser.id]: userBp } };
     });
+
+    // Write directly to Supabase
+    if (removing) {
+      supabase.from("bible_progress").delete()
+        .eq("user_id", currentUser.id).eq("book_name", bookName).eq("chapter", chNum)
+        .then(({ error }) => { if (error) console.error("Bible toggle error:", error); });
+    } else {
+      supabase.from("bible_progress").upsert({
+        user_id: currentUser.id, book_name: bookName, chapter: chNum,
+      }).then(({ error }) => { if (error) console.error("Bible toggle error:", error); });
+    }
   }
 
   function markAllChapters(bookName, totalCh) {
+    const current = data.bibleProgress?.[currentUser.id]?.[bookName] || [];
+    const clearing = current.length === totalCh;
+
+    // Update local state
     setData(d => {
       const userBp = { ...(d.bibleProgress?.[currentUser.id] || {}) };
-      const current = userBp[bookName] || [];
-      if (current.length === totalCh) {
+      if (clearing) {
         userBp[bookName] = [];
       } else {
         userBp[bookName] = Array.from({ length: totalCh }, (_, i) => i + 1);
       }
       return { ...d, bibleProgress: { ...d.bibleProgress, [currentUser.id]: userBp } };
     });
+
+    // Write directly to Supabase
+    if (clearing) {
+      supabase.from("bible_progress").delete()
+        .eq("user_id", currentUser.id).eq("book_name", bookName)
+        .then(({ error }) => { if (error) console.error("Bible markAll error:", error); });
+    } else {
+      const rows = Array.from({ length: totalCh }, (_, i) => ({
+        user_id: currentUser.id, book_name: bookName, chapter: i + 1,
+      }));
+      // Delete existing then insert all
+      supabase.from("bible_progress").delete()
+        .eq("user_id", currentUser.id).eq("book_name", bookName)
+        .then(() => {
+          supabase.from("bible_progress").upsert(rows)
+            .then(({ error }) => { if (error) console.error("Bible markAll error:", error); });
+        });
+    }
   }
 
   // Stats helpers
