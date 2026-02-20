@@ -2189,7 +2189,7 @@ function TriumphsPage() {
 // PAGE: LIBRARY / READING TRACKER
 // ════════════════════════════════════════
 function LibraryPage() {
-  const { data, setData, currentUser, showToast } = useContext(AppContext);
+  const { data, setData, currentUser, isAdmin, showToast } = useContext(AppContext);
   const [filter, setFilter] = useState("All");
   const [bookSearch, setBookSearch] = useState("");
   const [showAddBook, setShowAddBook] = useState(false);
