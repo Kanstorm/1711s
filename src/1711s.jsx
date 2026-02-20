@@ -2600,7 +2600,11 @@ function LibraryPage() {
         <div className="fireteam-reading">
           <div className="section-title" style={{ marginBottom: 16 }}>FIRETEAM READING PROGRESS</div>
           {data.books.filter(b => {
-            return getMembers(data).some(m => (data.readingProgress?.[m.id]?.[b.id] || 0) > 0);
+            // Only show books where at least one member is actively reading (started but not finished)
+            return getMembers(data).some(m => {
+              const pg = data.readingProgress?.[m.id]?.[b.id] || 0;
+              return pg > 0 && pg < b.pages;
+            });
           }).map(book => (
             <Panel key={book.id} style={{ marginBottom: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
@@ -2632,7 +2636,15 @@ function LibraryPage() {
         </div>
       ) : (
         <div className="book-grid">
-          {filtered.map(book => {
+          {[...filtered].sort((a, b) => {
+            const progA = data.readingProgress?.[currentUser.id]?.[a.id] || 0;
+            const progB = data.readingProgress?.[currentUser.id]?.[b.id] || 0;
+            const inProgressA = progA > 0 && progA < a.pages;
+            const inProgressB = progB > 0 && progB < b.pages;
+            if (inProgressA && !inProgressB) return -1;
+            if (!inProgressA && inProgressB) return 1;
+            return 0;
+          }).map(book => {
             const progress = getProgress(book.id);
             const pct = Math.round((progress / book.pages) * 100);
             const done = progress >= book.pages;
