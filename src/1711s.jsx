@@ -2941,6 +2941,49 @@ function ForumPage() {
   const [confirmDeleteThread, setConfirmDeleteThread] = useState(null);
   const [confirmDeletePost, setConfirmDeletePost] = useState(null);
 
+  // ── Realtime: subscribe to new posts ──
+  useEffect(() => {
+    const channel = supabase
+      .channel("posts-realtime")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, (payload) => {
+        const newPost = payload.new;
+        // Only add if it's not from the current user (we already added it optimistically)
+        if (newPost.author_id !== currentUser.id) {
+          setData(d => ({
+            ...d,
+            threads: d.threads.map(t =>
+              t.id === newPost.thread_id
+                ? {
+                    ...t,
+                    posts: t.posts.some(p => p.id === newPost.id) ? t.posts : [...t.posts, {
+                      id: newPost.id,
+                      authorId: newPost.author_id,
+                      text: newPost.body,
+                      date: newPost.created_at?.split("T")[0] || "",
+                    }],
+                  }
+                : t
+            ),
+          }));
+        }
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "threads" }, (payload) => {
+        const nt = payload.new;
+        if (nt.author_id !== currentUser.id) {
+          setData(d => ({
+            ...d,
+            threads: d.threads.some(t => t.id === nt.id) ? d.threads : [
+              { id: nt.id, title: nt.title, category: nt.category, authorId: nt.author_id, bookId: nt.book_id, date: nt.created_at?.split("T")[0] || "", posts: [] },
+              ...d.threads,
+            ],
+          }));
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [currentUser.id]);
+
   const pinnedIds = data.pinnedThreads || [];
   const threads = (filterCat === "All" ? data.threads : data.threads.filter(t => t.category === filterCat))
     .sort((a, b) => {
