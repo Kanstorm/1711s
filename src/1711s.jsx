@@ -5801,72 +5801,72 @@ export default function App() {
     return prof;
   }
 
-  // ── Auth state listener ──
-  useEffect(() => {
-    // Check current session on mount
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        const prof = await fetchProfile(session.user.id);
-        if (prof) {
-          setCurrentUser({
-            id: prof.id,
-            name: prof.display_name,
-            avatar: prof.avatar,
-            tag: prof.tag,
-            admin: prof.is_admin,
-          });
-          setProfile(prof);
-        }
+  // ── Auth + Data loading ──
+  const dataRef = useRef(null);
+  const initRef = useRef(false);
+
+  async function initApp(userId) {
+    try {
+      console.log("Fetching profile...");
+      const prof = await fetchProfile(userId);
+      if (prof) {
+        console.log("Profile loaded:", prof.display_name);
+        setCurrentUser({
+          id: prof.id,
+          name: prof.display_name,
+          avatar: prof.avatar,
+          tag: prof.tag,
+          admin: prof.is_admin,
+        });
+        setProfile(prof);
+
+        console.log("Loading data from Supabase...");
+        const allData = await loadAllData();
+        console.log("Data loaded:", allData.books.length, "books,", allData.members.length, "members");
+        setData(allData);
+        dataRef.current = allData;
       }
-      setLoading(false);
+    } catch (err) {
+      console.error("Error during init:", err);
+      const fallback = getSeedData();
+      setData(fallback);
+      dataRef.current = fallback;
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    // Get session on mount — this is synchronous with the auth state
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log("getSession result:", !!session);
+      if (session?.user && !initRef.current) {
+        initRef.current = true;
+        initApp(session.user.id);
+      } else {
+        setLoading(false);
+      }
     });
 
-    // Listen for auth changes (login, logout, token refresh)
+    // Listen for future auth changes (login/logout only)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === "SIGNED_IN" && session?.user) {
-          const prof = await fetchProfile(session.user.id);
-          if (prof) {
-            setCurrentUser({
-              id: prof.id,
-              name: prof.display_name,
-              avatar: prof.avatar,
-              tag: prof.tag,
-              admin: prof.is_admin,
-            });
-            setProfile(prof);
-          }
+      (event, session) => {
+        console.log("Auth event:", event);
+        if (event === "SIGNED_IN" && session?.user && !initRef.current) {
+          initRef.current = true;
+          initApp(session.user.id);
         } else if (event === "SIGNED_OUT") {
           setCurrentUser(null);
           setProfile(null);
+          setData(null);
+          dataRef.current = null;
+          initRef.current = false;
+          setLoading(false);
         }
       }
     );
 
     return () => subscription.unsubscribe();
   }, []);
-
-  // ── Load app data from Supabase (only after auth) ──
-  const dataRef = useRef(null);
-
-  useEffect(() => {
-    if (!currentUser) return;
-    async function loadData() {
-      try {
-        console.log("Loading data from Supabase...");
-        const allData = await loadAllData();
-        console.log("Data loaded:", Object.keys(allData));
-        setData(allData);
-        dataRef.current = allData;
-      } catch (err) {
-        console.error("Error loading data:", err);
-        const fallback = getSeedData();
-        setData(fallback);
-        dataRef.current = fallback;
-      }
-    }
-    loadData();
-  }, [currentUser]);
 
   // Wrap setData to auto-sync changes to Supabase
   function setDataSynced(updater) {
