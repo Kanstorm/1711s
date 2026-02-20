@@ -2205,6 +2205,42 @@ function LibraryPage() {
   const [selectedGroupRead, setSelectedGroupRead] = useState(null);
   const [chatMessage, setChatMessage] = useState("");
   const chatEndRef = useRef(null);
+  const [editingBook, setEditingBook] = useState(null);
+  const [confirmDeleteBook, setConfirmDeleteBook] = useState(null);
+
+  function startEditBook(book) {
+    setEditingBook({ ...book });
+  }
+
+  function saveBookEdit() {
+    if (!editingBook || !editingBook.title || !editingBook.author) return;
+    setData(d => ({
+      ...d,
+      books: d.books.map(b => b.id === editingBook.id ? { ...b, title: editingBook.title, author: editingBook.author, category: editingBook.category, pages: parseInt(editingBook.pages) || b.pages, coverUrl: editingBook.coverUrl || b.coverUrl } : b),
+    }));
+    // Also sync edit to Supabase directly
+    supabase.from("books").update({
+      title: editingBook.title, author: editingBook.author, category: editingBook.category,
+      pages: parseInt(editingBook.pages) || 0, cover_url: editingBook.coverUrl || null,
+    }).eq("id", editingBook.id).then(({ error }) => { if (error) console.error("Book update error:", error); });
+    setEditingBook(null);
+    setSelectedBook(null);
+    showToast("Book updated");
+  }
+
+  function deleteBook(bookId) {
+    const book = data.books.find(b => b.id === bookId);
+    setData(d => ({
+      ...d,
+      books: d.books.filter(b => b.id !== bookId),
+      reviews: d.reviews.filter(r => r.bookId !== bookId),
+    }));
+    // Sync delete to Supabase directly
+    supabase.from("books").delete().eq("id", bookId).then(({ error }) => { if (error) console.error("Book delete error:", error); });
+    setConfirmDeleteBook(null);
+    setSelectedBook(null);
+    showToast(`"${book?.title}" deleted from library`, "info");
+  }
 
   const filtered = data.books.filter(b => {
     if (filter !== "All" && b.category !== filter) return false;
@@ -2636,8 +2672,27 @@ function LibraryPage() {
       )}
 
       {/* Update Progress Modal */}
-      <Modal open={!!selectedBook && !showInvite} onClose={() => setSelectedBook(null)} title="Update Reading Progress">
-        {selectedBook && (
+      <Modal open={!!selectedBook && !showInvite} onClose={() => { setSelectedBook(null); setEditingBook(null); }} title={editingBook ? "Edit Book" : "Update Reading Progress"}>
+        {selectedBook && editingBook ? (
+          <div style={{ padding: 16 }}>
+            <label className="input-label">Title</label>
+            <input className="text-input" value={editingBook.title} onChange={e => setEditingBook({ ...editingBook, title: e.target.value })} />
+            <label className="input-label">Author</label>
+            <input className="text-input" value={editingBook.author} onChange={e => setEditingBook({ ...editingBook, author: e.target.value })} />
+            <label className="input-label">Category</label>
+            <select className="text-input" value={editingBook.category} onChange={e => setEditingBook({ ...editingBook, category: e.target.value })}>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <label className="input-label">Pages</label>
+            <input className="text-input" type="number" value={editingBook.pages} onChange={e => setEditingBook({ ...editingBook, pages: e.target.value })} />
+            <label className="input-label">Cover URL</label>
+            <input className="text-input" value={editingBook.coverUrl || ""} onChange={e => setEditingBook({ ...editingBook, coverUrl: e.target.value })} placeholder="https://..." />
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button className="gold-btn" onClick={saveBookEdit} style={{ flex: 1, justifyContent: "center" }}>Save Changes</button>
+              <button className="gold-btn" onClick={() => setEditingBook(null)} style={{ flex: 1, justifyContent: "center", background: "rgba(255,255,255,0.04)" }}>Cancel</button>
+            </div>
+          </div>
+        ) : selectedBook && (
           <div style={{ padding: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
               <span style={{ fontSize: 36 }}><BookCover book={selectedBook} size={36} /></span>
@@ -2675,9 +2730,31 @@ function LibraryPage() {
               </div>
               <ChevronRight size={16} style={{ marginLeft: "auto", color: "#6B6152" }} />
             </button>
+            {isAdmin && (
+              <>
+                <DiamondDivider />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="gold-btn" onClick={() => startEditBook(selectedBook)} style={{ flex: 1, justifyContent: "center" }}>
+                    <Edit3 size={14} /> Edit Book
+                  </button>
+                  <button className="gold-btn" onClick={() => setConfirmDeleteBook(selectedBook.id)} style={{ flex: 1, justifyContent: "center", color: "#C0392B", borderColor: "rgba(192,57,43,0.3)" }}>
+                    <X size={14} /> Delete Book
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={!!confirmDeleteBook}
+        onClose={() => setConfirmDeleteBook(null)}
+        onConfirm={() => deleteBook(confirmDeleteBook)}
+        title="Delete Book?"
+        message={`This will permanently remove "${data.books.find(b => b.id === confirmDeleteBook)?.title}" and all associated reading progress.`}
+        confirmLabel="Delete"
+      />
 
       {/* Invite to Read Modal */}
       <Modal open={showInvite} onClose={() => setShowInvite(false)} title="Invite to Read">
@@ -6006,6 +6083,11 @@ export default function App() {
     setPage(id);
     setProfileTarget(null);
     setMobileMenuOpen(false);
+    // Re-fetch data from Supabase on every page change
+    loadAllData().then(allData => {
+      setData(allData);
+      dataRef.current = allData;
+    }).catch(err => console.error("Refresh error:", err));
   }
 
   return (
