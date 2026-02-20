@@ -2191,6 +2191,7 @@ function TriumphsPage() {
 function LibraryPage() {
   const { data, setData, currentUser, showToast } = useContext(AppContext);
   const [filter, setFilter] = useState("All");
+  const [bookSearch, setBookSearch] = useState("");
   const [showAddBook, setShowAddBook] = useState(false);
   const [selectedBook, setSelectedBook] = useState(null);
   const [newBook, setNewBook] = useState({ title: "", author: "", category: CATEGORIES[0], pages: "", coverUrl: "" });
@@ -2205,7 +2206,14 @@ function LibraryPage() {
   const [chatMessage, setChatMessage] = useState("");
   const chatEndRef = useRef(null);
 
-  const filtered = filter === "All" ? data.books : data.books.filter(b => b.category === filter);
+  const filtered = data.books.filter(b => {
+    if (filter !== "All" && b.category !== filter) return false;
+    if (bookSearch.trim()) {
+      const q = bookSearch.toLowerCase().trim();
+      return b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q);
+    }
+    return true;
+  });
 
   const activeGroupReads = (data.readInvites || []).filter(inv =>
     inv.status === "active" && (inv.fromId === currentUser.id || inv.acceptedIds.includes(currentUser.id))
@@ -2521,6 +2529,23 @@ function LibraryPage() {
           </div>
         </div>
       )}
+
+      <div style={{ position: "relative", marginBottom: 12 }}>
+        <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#6B6152" }} />
+        <input
+          className="text-input"
+          type="text"
+          placeholder="Search books by title or author..."
+          value={bookSearch}
+          onChange={e => setBookSearch(e.target.value)}
+          style={{ paddingLeft: 34, margin: 0 }}
+        />
+        {bookSearch && (
+          <button onClick={() => setBookSearch("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#6B6152", cursor: "pointer" }}>
+            <X size={14} />
+          </button>
+        )}
+      </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <button
