@@ -2188,6 +2188,496 @@ function TriumphsPage() {
 // ════════════════════════════════════════
 // PAGE: LIBRARY / READING TRACKER
 // ════════════════════════════════════════
+// ════════════════════════════════════════
+// SLOT MACHINE COUNTER ANIMATION
+// ════════════════════════════════════════
+function SlotDigit({ digit, animate, delay = 0 }) {
+  const [displayed, setDisplayed] = useState(digit);
+  const [spinning, setSpinning] = useState(false);
+
+  useEffect(() => {
+    if (!animate) { setDisplayed(digit); return; }
+    setSpinning(true);
+    const spinDuration = 900 + delay;
+    const interval = 50;
+    let elapsed = 0;
+    const timer = setInterval(() => {
+      elapsed += interval;
+      if (elapsed < spinDuration) {
+        setDisplayed(Math.floor(Math.random() * 10));
+      } else {
+        setDisplayed(digit);
+        setSpinning(false);
+        clearInterval(timer);
+      }
+    }, interval);
+    return () => clearInterval(timer);
+  }, [digit, animate, delay]);
+
+  return (
+    <span className={`slot-digit ${spinning ? "slot-spinning" : "slot-landed"}`}>
+      {displayed}
+    </span>
+  );
+}
+
+function SlotCounter({ value, animate }) {
+  const digits = String(value).split("").map(Number);
+  return (
+    <div className="slot-counter">
+      {digits.map((d, i) => (
+        <SlotDigit key={`${digits.length}-${i}`} digit={d} animate={animate} delay={i * 120} />
+      ))}
+    </div>
+  );
+}
+
+// ── Golden Flame Ascension Animation (Book Completion) ──
+function FlameAscensionAnimation({ bookTitle, onComplete }) {
+  const canvasRef = useRef(null);
+  const animRef = useRef(null);
+  const startRef = useRef(null);
+  const [phase, setPhase] = useState(0); // 0=flames rise, 1=burst, 2=reveal, 3=fade
+  const [showText, setShowText] = useState(false);
+  const [textOpacity, setTextOpacity] = useState(0);
+  const [screenFlash, setScreenFlash] = useState(0);
+  const flamesRef = useRef([]);
+  const embersRef = useRef([]);
+  const burstRef = useRef([]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    canvas.width = W;
+    canvas.height = H;
+    const cx = W / 2, cy = H / 2;
+
+    // ── Initialize flame particles ──
+    // These rise from the bottom in waves, creating a wall of fire
+    flamesRef.current = Array.from({ length: 120 }, (_, i) => {
+      const x = (i / 120) * W + (Math.random() - 0.5) * (W / 10);
+      return {
+        x, baseX: x,
+        y: H + Math.random() * 100,
+        vy: -(2.5 + Math.random() * 4),
+        vx: (Math.random() - 0.5) * 1.5,
+        size: 8 + Math.random() * 18,
+        life: 1,
+        decay: 0.003 + Math.random() * 0.004,
+        phase: Math.random() * Math.PI * 2,
+        freq: 2 + Math.random() * 3,
+        hue: Math.random(), // 0=gold, 0.5=orange, 1=red
+        delay: (i % 20) * 0.04 + Math.random() * 0.3, // staggered start
+      };
+    });
+
+    // ── Embers that float up after the burst ──
+    embersRef.current = Array.from({ length: 80 }, () => ({
+      x: cx + (Math.random() - 0.5) * W * 0.8,
+      y: H + Math.random() * 200,
+      vx: (Math.random() - 0.5) * 1,
+      vy: -(1 + Math.random() * 3),
+      size: 1 + Math.random() * 3,
+      life: 1,
+      decay: 0.002 + Math.random() * 0.004,
+      flickerPhase: Math.random() * Math.PI * 2,
+    }));
+
+    // ── Burst particles (golden explosion at climax) ──
+    burstRef.current = Array.from({ length: 100 }, () => {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 2 + Math.random() * 10;
+      return {
+        x: cx, y: cy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        size: 2 + Math.random() * 6,
+        life: 1,
+        decay: 0.008 + Math.random() * 0.015,
+        color: ["#D4AF37", "#FFD700", "#E8E0D0", "#FF8C00", "#FFA500"][Math.floor(Math.random() * 5)],
+        rotation: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 0.2,
+        trail: [],
+      };
+    });
+
+    startRef.current = performance.now();
+    let currentPhase = 0;
+
+    // ── Phase timings ──
+    const phase0End = 3.0;   // Flames rise and consume screen
+    const phase1End = 4.5;   // Golden burst / explosion
+    const phase2End = 7.5;   // Reveal text + embers
+    const phase3End = 9.0;   // Fade out → onComplete
+
+    function getFlameColor(hue, alpha) {
+      // hue: 0=bright gold, 0.5=orange, 1=deep red
+      if (hue < 0.33) {
+        const r = 255, g = Math.round(200 + (1 - hue * 3) * 55), b = Math.round(50 * (1 - hue * 3));
+        return `rgba(${r},${g},${b},${alpha})`;
+      } else if (hue < 0.66) {
+        const t = (hue - 0.33) * 3;
+        const r = 255, g = Math.round(200 - t * 80), b = 0;
+        return `rgba(${r},${g},${b},${alpha})`;
+      } else {
+        const t = (hue - 0.66) * 3;
+        const r = Math.round(255 - t * 60), g = Math.round(120 - t * 80), b = 0;
+        return `rgba(${r},${g},${b},${alpha})`;
+      }
+    }
+
+    function animate(now) {
+      const elapsed = (now - startRef.current) / 1000;
+      ctx.clearRect(0, 0, W, H);
+
+      // Background — deepens as flames consume
+      const bgDark = Math.min(0.97, elapsed * 0.4);
+      ctx.fillStyle = `rgba(13, 11, 10, ${bgDark})`;
+      ctx.fillRect(0, 0, W, H);
+
+      // ── Phase 0: Flames rise from bottom ──
+      if (elapsed < phase0End) {
+        currentPhase = 0;
+        const progress = elapsed / phase0End; // 0→1
+
+        // Heat distortion glow at bottom
+        const heatH = H * progress * 0.8;
+        const heatGrad = ctx.createLinearGradient(0, H, 0, H - heatH);
+        heatGrad.addColorStop(0, `rgba(212, 175, 55, ${0.15 * progress})`);
+        heatGrad.addColorStop(0.4, `rgba(255, 140, 0, ${0.08 * progress})`);
+        heatGrad.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = heatGrad;
+        ctx.fillRect(0, 0, W, H);
+
+        // Draw flame particles
+        flamesRef.current.forEach(f => {
+          if (elapsed < f.delay) return;
+          const age = elapsed - f.delay;
+          
+          // Move upward with sinusoidal sway
+          f.y += f.vy * (0.8 + progress * 0.6);
+          f.x = f.baseX + Math.sin(f.phase + age * f.freq) * (15 + progress * 20);
+
+          // Flames grow larger as they fill the screen
+          const sizeMultiplier = 1 + progress * 1.5;
+          const s = f.size * sizeMultiplier;
+          const alpha = Math.max(0, f.life * (0.4 + progress * 0.5));
+
+          if (alpha <= 0) return;
+
+          // Core flame shape — soft radial gradient
+          const grad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, s);
+          grad.addColorStop(0, getFlameColor(f.hue * 0.5, alpha * 0.9));
+          grad.addColorStop(0.3, getFlameColor(f.hue * 0.7, alpha * 0.6));
+          grad.addColorStop(0.7, getFlameColor(f.hue, alpha * 0.2));
+          grad.addColorStop(1, "rgba(0,0,0,0)");
+
+          ctx.save();
+          ctx.shadowColor = getFlameColor(f.hue * 0.3, 0.8);
+          ctx.shadowBlur = s * 0.8;
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(f.x, f.y, s, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+
+          // Respawn at bottom when they go too high or die
+          if (f.y < -s * 2) {
+            f.y = H + Math.random() * 40;
+            f.baseX = Math.random() * W;
+            f.x = f.baseX;
+            f.hue = Math.random();
+          }
+        });
+
+        // Bright central pillar of fire forming in late phase
+        if (progress > 0.5) {
+          const pillarT = (progress - 0.5) * 2;
+          const pillarW = 60 + pillarT * 100;
+          const pillarH = H * pillarT;
+          const pillarGrad = ctx.createLinearGradient(cx, H, cx, H - pillarH);
+          pillarGrad.addColorStop(0, `rgba(255, 200, 50, ${pillarT * 0.3})`);
+          pillarGrad.addColorStop(0.5, `rgba(212, 175, 55, ${pillarT * 0.15})`);
+          pillarGrad.addColorStop(1, "rgba(212, 175, 55, 0)");
+          ctx.fillStyle = pillarGrad;
+          ctx.fillRect(cx - pillarW / 2, H - pillarH, pillarW, pillarH);
+        }
+
+        // Screen shake as intensity builds
+        if (progress > 0.7) {
+          const shake = (progress - 0.7) * 15;
+          canvas.style.transform = `translate(${(Math.random() - 0.5) * shake}px, ${(Math.random() - 0.5) * shake}px)`;
+        }
+      }
+      // ── Phase 1: Golden burst / explosion ──
+      else if (elapsed < phase1End) {
+        if (currentPhase < 1) {
+          currentPhase = 1;
+          setPhase(1);
+          setScreenFlash(1);
+          canvas.style.transform = "none";
+          setTimeout(() => setScreenFlash(0), 250);
+        }
+        const t = (elapsed - phase0End) / (phase1End - phase0End);
+
+        // White-gold flash fading
+        const flashAlpha = Math.max(0, 1 - t * 2.5);
+        if (flashAlpha > 0) {
+          ctx.fillStyle = `rgba(255, 235, 180, ${flashAlpha * 0.7})`;
+          ctx.fillRect(0, 0, W, H);
+        }
+
+        // Shockwave ring
+        const swRadius = t * Math.max(W, H) * 0.7;
+        const swOpacity = Math.max(0, 1 - t * 1.3);
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, swRadius, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(212, 175, 55, ${swOpacity * 0.7})`;
+        ctx.lineWidth = 4 + (1 - t) * 10;
+        ctx.shadowColor = "#D4AF37";
+        ctx.shadowBlur = 40;
+        ctx.stroke();
+        ctx.restore();
+
+        // Second shockwave
+        if (t > 0.1) {
+          const sw2t = (t - 0.1) / 0.9;
+          const sw2R = sw2t * Math.max(W, H) * 0.5;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(cx, cy, sw2R, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(255, 140, 0, ${Math.max(0, 1 - sw2t * 1.5) * 0.5})`;
+          ctx.lineWidth = 2 + (1 - sw2t) * 6;
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Burst particles
+        burstRef.current.forEach(p => {
+          if (p.life <= 0) return;
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.04;
+          p.vx *= 0.994;
+          p.life -= p.decay;
+          p.rotation += p.rotSpeed;
+          p.trail.push({ x: p.x, y: p.y, life: 0.4 });
+          if (p.trail.length > 6) p.trail.shift();
+
+          // Trails
+          p.trail.forEach(tp => {
+            tp.life -= 0.04;
+            if (tp.life <= 0) return;
+            ctx.save();
+            ctx.globalAlpha = tp.life * p.life * 0.4;
+            ctx.beginPath();
+            ctx.arc(tp.x, tp.y, p.size * 0.3, 0, Math.PI * 2);
+            ctx.fillStyle = p.color;
+            ctx.fill();
+            ctx.restore();
+          });
+
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, p.life);
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rotation);
+          // Diamond spark shape
+          const s = p.size * (0.5 + p.life * 0.5);
+          ctx.beginPath();
+          ctx.moveTo(0, -s);
+          ctx.lineTo(s * 0.5, 0);
+          ctx.lineTo(0, s);
+          ctx.lineTo(-s * 0.5, 0);
+          ctx.closePath();
+          ctx.fillStyle = p.color;
+          ctx.shadowColor = p.color;
+          ctx.shadowBlur = 12;
+          ctx.fill();
+          ctx.restore();
+        });
+
+        // Center glow fading
+        const glowAlpha = Math.max(0, 1 - t * 2);
+        if (glowAlpha > 0) {
+          const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 150);
+          grad.addColorStop(0, `rgba(255, 255, 240, ${glowAlpha * 0.8})`);
+          grad.addColorStop(0.3, `rgba(212, 175, 55, ${glowAlpha * 0.4})`);
+          grad.addColorStop(1, "rgba(212, 175, 55, 0)");
+          ctx.fillStyle = grad;
+          ctx.fillRect(cx - 150, cy - 150, 300, 300);
+        }
+      }
+      // ── Phase 2: Reveal — embers float, text appears ──
+      else if (elapsed < phase2End) {
+        if (currentPhase < 2) {
+          currentPhase = 2;
+          setPhase(2);
+          setShowText(true);
+          setTimeout(() => setTextOpacity(1), 150);
+        }
+        const t = (elapsed - phase1End) / (phase2End - phase1End);
+
+        // Gentle ambient warmth
+        const ambientGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.6);
+        ambientGrad.addColorStop(0, "rgba(212, 175, 55, 0.06)");
+        ambientGrad.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = ambientGrad;
+        ctx.fillRect(0, 0, W, H);
+
+        // Floating embers
+        embersRef.current.forEach(e => {
+          if (e.life <= 0) return;
+          e.x += e.vx + Math.sin(e.flickerPhase + elapsed * 1.5) * 0.4;
+          e.y += e.vy;
+          e.life -= e.decay;
+          e.flickerPhase += 0.03;
+          const flicker = 0.3 + Math.sin(e.flickerPhase) * 0.25;
+          ctx.save();
+          ctx.globalAlpha = e.life * flicker;
+          ctx.beginPath();
+          ctx.arc(e.x, e.y, e.size, 0, Math.PI * 2);
+          ctx.fillStyle = "#D4AF37";
+          ctx.shadowColor = "#D4AF37";
+          ctx.shadowBlur = 8;
+          ctx.fill();
+          ctx.restore();
+        });
+
+        // Remaining burst particles settling
+        burstRef.current.forEach(p => {
+          if (p.life <= 0) return;
+          p.x += p.vx * 0.3;
+          p.y += p.vy * 0.3;
+          p.vy += 0.01;
+          p.life -= p.decay * 0.5;
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, p.life * 0.5);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * 0.5, 0, Math.PI * 2);
+          ctx.fillStyle = p.color;
+          ctx.shadowColor = p.color;
+          ctx.shadowBlur = 4;
+          ctx.fill();
+          ctx.restore();
+        });
+
+        // Faint orbiting golden motes around center
+        for (let i = 0; i < 6; i++) {
+          const orbitAngle = (i / 6) * Math.PI * 2 + elapsed * 0.6;
+          const orbitR = 80 + Math.sin(elapsed * 1.5 + i) * 15;
+          const ox = cx + Math.cos(orbitAngle) * orbitR;
+          const oy = cy + Math.sin(orbitAngle) * orbitR;
+          ctx.save();
+          ctx.globalAlpha = 0.4;
+          ctx.beginPath();
+          ctx.arc(ox, oy, 2, 0, Math.PI * 2);
+          ctx.fillStyle = "#D4AF37";
+          ctx.shadowColor = "#D4AF37";
+          ctx.shadowBlur = 10;
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+      // ── Phase 3: Fade out → complete ──
+      else {
+        if (currentPhase < 3) {
+          currentPhase = 3;
+          setPhase(3);
+          setTimeout(() => onComplete(), 1200);
+        }
+        return;
+      }
+
+      animRef.current = requestAnimationFrame(animate);
+    }
+
+    animRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+      canvas.style.transform = "none";
+    };
+  }, []);
+
+  return (
+    <div className="flame-anim-overlay" style={{ opacity: phase === 3 ? 0 : 1 }}>
+      {screenFlash > 0 && (
+        <div style={{
+          position: "absolute", inset: 0, background: "rgba(255,235,180,0.9)",
+          opacity: screenFlash, zIndex: 3, pointerEvents: "none",
+          transition: "opacity 0.25s",
+        }} />
+      )}
+      <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, zIndex: 1 }} />
+      {showText && (
+        <div className="flame-anim-text" style={{ opacity: textOpacity }}>
+          <div className="flame-anim-icon">✦</div>
+          <div className="flame-anim-label">BOOK COMPLETED</div>
+          <div className="flame-anim-title">{bookTitle}</div>
+          <button className="flame-anim-continue" onClick={onComplete}>Continue</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Slot Overlay (progress update + completion) ──
+function SlotOverlay({ oldValue, newValue, pagesAdded, bookTitle, pagesRemaining, isCompleted, onDone }) {
+  const [showFlameAnim, setShowFlameAnim] = useState(isCompleted);
+  const [phase, setPhase] = useState("enter"); // enter -> counting -> done
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  useEffect(() => {
+    if (showFlameAnim) return; // Wait for flame anim to finish first
+    const t1 = setTimeout(() => setPhase("counting"), 300);
+    const t2 = setTimeout(() => { setPhase("done"); setShowConfetti(true); }, 1800);
+    const t3 = setTimeout(() => onDone(), 3800);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [showFlameAnim]);
+
+  if (showFlameAnim) {
+    return <FlameAscensionAnimation bookTitle={bookTitle} onComplete={() => setShowFlameAnim(false)} />;
+  }
+
+  return (
+    <div className={`slot-overlay ${phase}`} onClick={onDone}>
+      {showConfetti && (
+        <div className="slot-confetti">
+          {Array.from({ length: isCompleted ? 40 : 20 }).map((_, i) => (
+            <span key={i} className="confetti-particle" style={{
+              left: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 0.5}s`,
+              animationDuration: `${1 + Math.random() * 1.5}s`,
+              background: ["#D4AF37", "#E8E0D0", "#2B9EB3", "#27AE60", "#C0392B"][i % 5],
+            }} />
+          ))}
+        </div>
+      )}
+      <div className="slot-overlay-content">
+        {isCompleted ? (
+          <div className="slot-completed-badge">
+            <div className="slot-completed-icon">✦</div>
+            <div className="slot-completed-text">BOOK COMPLETED</div>
+          </div>
+        ) : (
+          <div className="slot-remaining">
+            <span className="slot-remaining-num">{pagesRemaining.toLocaleString()}</span>
+            <span className="slot-remaining-text"> pages remaining</span>
+          </div>
+        )}
+        <div className="slot-added-label">+{pagesAdded} pages</div>
+        <div className="slot-book-title">{bookTitle}</div>
+        <div className="slot-divider" />
+        <div className="slot-total-label">TOTAL PAGES READ</div>
+        <SlotCounter value={phase === "enter" ? oldValue : newValue} animate={phase === "counting"} />
+      </div>
+    </div>
+  );
+}
+
 function LibraryPage() {
   const { data, setData, currentUser, isAdmin, showToast } = useContext(AppContext);
   const [filter, setFilter] = useState("All");
@@ -2207,6 +2697,7 @@ function LibraryPage() {
   const chatEndRef = useRef(null);
   const [editingBook, setEditingBook] = useState(null);
   const [confirmDeleteBook, setConfirmDeleteBook] = useState(null);
+  const [slotAnim, setSlotAnim] = useState(null); // { oldValue, newValue, pagesAdded, bookTitle }
 
   function startEditBook(book) {
     setEditingBook({ ...book });
@@ -2277,6 +2768,13 @@ function LibraryPage() {
     const pg = parseInt(updatePage);
     if (isNaN(pg)) return;
     const book = data.books.find(b => b.id === bookId);
+    // Calculate old total pages for slot animation
+    const oldTotal = Object.values(data.readingProgress?.[currentUser.id] || {}).reduce((s, v) => s + v, 0);
+    const oldBookPg = data.readingProgress?.[currentUser.id]?.[bookId] || 0;
+    const newTotal = oldTotal - oldBookPg + pg;
+    const pagesAdded = pg - oldBookPg;
+    const isCompleted = book && pg >= book.pages;
+    const pagesRemaining = book ? Math.max(0, book.pages - pg) : 0;
     setData(d => ({
       ...d,
       readingProgress: {
@@ -2286,7 +2784,14 @@ function LibraryPage() {
     }));
     setUpdatePage("");
     setSelectedBook(null);
-    if (book && pg >= book.pages) showToast(`"${book.title}" completed!`);
+    // Trigger slot animation if pages actually increased
+    if (pagesAdded > 0) {
+      setSlotAnim({
+        oldValue: oldTotal, newValue: newTotal, pagesAdded,
+        bookTitle: book?.title || "Unknown", isCompleted, pagesRemaining,
+      });
+    }
+    if (isCompleted) showToast(`"${book.title}" completed!`);
     else showToast("Progress updated");
   }
 
@@ -2767,6 +3272,19 @@ function LibraryPage() {
         message={`This will permanently remove "${data.books.find(b => b.id === confirmDeleteBook)?.title}" and all associated reading progress.`}
         confirmLabel="Delete"
       />
+
+      {/* Slot Machine Animation Overlay */}
+      {slotAnim && (
+        <SlotOverlay
+          oldValue={slotAnim.oldValue}
+          newValue={slotAnim.newValue}
+          pagesAdded={slotAnim.pagesAdded}
+          bookTitle={slotAnim.bookTitle}
+          isCompleted={slotAnim.isCompleted}
+          pagesRemaining={slotAnim.pagesRemaining}
+          onDone={() => setSlotAnim(null)}
+        />
+      )}
 
       {/* Invite to Read Modal */}
       <Modal open={showInvite} onClose={() => setShowInvite(false)} title="Invite to Read">
@@ -5779,6 +6297,212 @@ select.text-input { cursor: pointer; }
 .seal-card:nth-child(4) { animation-delay: 0.2s; }
 .seal-card:nth-child(5) { animation-delay: 0.25s; }
 .seal-card:nth-child(6) { animation-delay: 0.3s; }
+
+/* ═══ Slot Machine Counter Animation ═══ */
+.slot-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0);
+  transition: background 0.4s ease;
+  cursor: pointer;
+}
+.slot-overlay.enter { background: rgba(0, 0, 0, 0.7); }
+.slot-overlay.counting { background: rgba(0, 0, 0, 0.85); }
+.slot-overlay.done { background: rgba(0, 0, 0, 0.85); }
+
+.slot-overlay-content {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  animation: slotContentIn 0.4s ease-out;
+}
+
+@keyframes slotContentIn {
+  from { opacity: 0; transform: scale(0.85) translateY(20px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.slot-added-label {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 28px; font-weight: 700; color: #27AE60;
+  letter-spacing: 2px;
+  text-shadow: 0 0 20px rgba(39, 174, 96, 0.5);
+  animation: slotPulse 0.6s ease-in-out infinite alternate;
+  animation-delay: 0.3s;
+}
+
+@keyframes slotPulse {
+  from { opacity: 0.8; }
+  to { opacity: 1; }
+}
+
+.slot-book-title {
+  font-family: 'Jost', sans-serif;
+  font-size: 14px; color: #A09880;
+  max-width: 280px; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.slot-remaining {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 15px; color: #6B6152;
+  letter-spacing: 1px; margin-bottom: 2px;
+  animation: slotFadeDown 0.5s ease-out;
+}
+.slot-remaining-num {
+  color: #D4AF37; font-weight: 700; font-size: 20px;
+}
+.slot-remaining-text {
+  font-weight: 500;
+}
+
+.slot-completed-badge {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  margin-bottom: 6px;
+  animation: slotBadgeIn 0.6s ease-out;
+}
+.slot-completed-icon {
+  font-size: 32px; color: #D4AF37;
+  text-shadow: 0 0 24px rgba(212, 175, 55, 0.7), 0 0 48px rgba(212, 175, 55, 0.3);
+  animation: slotStarPulse 1.2s ease-in-out infinite alternate;
+}
+.slot-completed-text {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 14px; font-weight: 700;
+  color: #27AE60; letter-spacing: 3px;
+  text-shadow: 0 0 12px rgba(39, 174, 96, 0.4);
+}
+
+@keyframes slotFadeDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slotBadgeIn {
+  0% { opacity: 0; transform: scale(0.5); }
+  60% { opacity: 1; transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+@keyframes slotStarPulse {
+  from { transform: scale(1); text-shadow: 0 0 24px rgba(212, 175, 55, 0.7), 0 0 48px rgba(212, 175, 55, 0.3); }
+  to { transform: scale(1.15); text-shadow: 0 0 32px rgba(212, 175, 55, 0.9), 0 0 64px rgba(212, 175, 55, 0.5); }
+}
+
+/* ═══ Flame Ascension Animation ═══ */
+.flame-anim-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(13, 11, 10, 0.98);
+  transition: opacity 1.0s ease-out;
+}
+.flame-anim-text {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  transition: opacity 0.8s ease-out;
+  pointer-events: auto;
+}
+.flame-anim-icon {
+  font-size: 48px; color: #D4AF37;
+  text-shadow: 0 0 30px rgba(212, 175, 55, 0.8), 0 0 60px rgba(212, 175, 55, 0.4);
+  animation: flameIconPulse 2s ease-in-out infinite alternate;
+  margin-bottom: 12px;
+}
+@keyframes flameIconPulse {
+  from { transform: scale(1); filter: brightness(1); }
+  to { transform: scale(1.1); filter: brightness(1.2); }
+}
+.flame-anim-label {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 14px; font-weight: 700; color: #27AE60;
+  letter-spacing: 4px;
+  text-shadow: 0 0 16px rgba(39, 174, 96, 0.5);
+  margin-bottom: 8px;
+}
+.flame-anim-title {
+  font-family: 'Jost', sans-serif;
+  font-size: 24px; font-weight: 600; color: #E8E0D0;
+  text-align: center; max-width: 320px;
+  text-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+  margin-bottom: 8px;
+}
+.flame-anim-sub {
+  font-family: 'Jost', sans-serif;
+  font-size: 13px; color: #6B6152; font-style: italic;
+  margin-bottom: 28px;
+}
+.flame-anim-continue {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px; font-weight: 600; letter-spacing: 2px;
+  color: #D4AF37; background: transparent;
+  border: 1px solid #D4AF3744; border-radius: 4px;
+  padding: 8px 28px; cursor: pointer;
+  transition: all 0.2s;
+}
+.flame-anim-continue:hover {
+  background: rgba(212, 175, 55, 0.1);
+  border-color: #D4AF37;
+}
+
+.slot-divider {
+  width: 60px; height: 1px;
+  background: linear-gradient(90deg, transparent, #D4AF37, transparent);
+  margin: 8px 0;
+}
+
+.slot-total-label {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 11px; color: #6B6152;
+  letter-spacing: 3px; font-weight: 600;
+}
+
+.slot-counter {
+  display: flex; align-items: center; gap: 3px;
+}
+
+.slot-digit {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 56px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 36px; font-weight: 700;
+  color: #E8E0D0;
+  background: linear-gradient(180deg, #1C1916 0%, #242019 50%, #1C1916 100%);
+  border: 1px solid #3A3428;
+  border-radius: 6px;
+  text-shadow: 0 0 12px rgba(212, 175, 55, 0.3);
+  transition: color 0.15s, text-shadow 0.15s;
+}
+
+.slot-digit.slot-spinning {
+  color: #D4AF37;
+  text-shadow: 0 0 16px rgba(212, 175, 55, 0.6);
+  animation: slotGlow 0.1s ease-in-out infinite alternate;
+}
+
+.slot-digit.slot-landed {
+  animation: slotLand 0.3s ease-out;
+}
+
+@keyframes slotGlow {
+  from { border-color: #3A3428; }
+  to { border-color: #D4AF3766; }
+}
+
+@keyframes slotLand {
+  0% { transform: scaleY(1); }
+  40% { transform: scaleY(1.08); color: #D4AF37; text-shadow: 0 0 20px rgba(212, 175, 55, 0.7); }
+  100% { transform: scaleY(1); }
+}
+
+/* Confetti */
+.slot-confetti {
+  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+}
+.confetti-particle {
+  position: absolute; top: -10px;
+  width: 6px; height: 6px; border-radius: 1px;
+  animation: confettiFall linear forwards;
+  opacity: 0.9;
+}
+@keyframes confettiFall {
+  0% { transform: translateY(0) rotate(0deg); opacity: 0.9; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
 `;
 
 function AuthScreen() {
