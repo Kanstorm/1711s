@@ -161,6 +161,7 @@ function getSeedData() {
     prestigeLevel: {},
     customSeals: [],
     pinnedThreads: [],
+    reviewLikes: {},
     displayNames: {},
     friendRequests: [],
     friends: {},
@@ -3410,17 +3411,50 @@ function ReviewsPage() {
   const [showWrite, setShowWrite] = useState(false);
   const [filterCat, setFilterCat] = useState("All");
   const [filterRating, setFilterRating] = useState(0);
+  const [sortBy, setSortBy] = useState("recent"); // "recent" | "most_liked"
+  const [bookSearch, setBookSearch] = useState("");
   const [newReview, setNewReview] = useState({ bookId: "", rating: 5, text: "" });
   const [confirmDelete, setConfirmDelete] = useState(null);
+
+  function getLikes(reviewId) {
+    return data.reviewLikes?.[reviewId] || [];
+  }
+
+  function toggleLike(reviewId) {
+    setData(d => {
+      const likes = d.reviewLikes?.[reviewId] || [];
+      const already = likes.includes(currentUser.id);
+      return {
+        ...d,
+        reviewLikes: {
+          ...d.reviewLikes,
+          [reviewId]: already ? likes.filter(id => id !== currentUser.id) : [...likes, currentUser.id],
+        },
+      };
+    });
+  }
 
   const reviews = data.reviews
     .filter(r => {
       const book = data.books.find(b => b.id === r.bookId);
       if (filterCat !== "All" && book?.category !== filterCat) return false;
       if (filterRating > 0 && r.rating !== filterRating) return false;
+      if (bookSearch.trim()) {
+        const q = bookSearch.toLowerCase().trim();
+        const matchTitle = book?.title?.toLowerCase().includes(q);
+        const matchAuthor = book?.author?.toLowerCase().includes(q);
+        if (!matchTitle && !matchAuthor) return false;
+      }
       return true;
     })
-    .sort((a, b) => b.date.localeCompare(a.date));
+    .sort((a, b) => {
+      if (sortBy === "most_liked") {
+        const aLikes = (data.reviewLikes?.[a.id] || []).length;
+        const bLikes = (data.reviewLikes?.[b.id] || []).length;
+        if (bLikes !== aLikes) return bLikes - aLikes;
+      }
+      return b.date.localeCompare(a.date);
+    });
 
   function submitReview() {
     if (!newReview.bookId || !newReview.text) return;
@@ -3432,7 +3466,11 @@ function ReviewsPage() {
   }
 
   function deleteReview(reviewId) {
-    setData(d => ({ ...d, reviews: d.reviews.filter(r => r.id !== reviewId) }));
+    setData(d => {
+      const newLikes = { ...d.reviewLikes };
+      delete newLikes[reviewId];
+      return { ...d, reviews: d.reviews.filter(r => r.id !== reviewId), reviewLikes: newLikes };
+    });
     showToast("Review deleted", "info");
   }
 
@@ -3442,6 +3480,36 @@ function ReviewsPage() {
         <Star size={24} style={{ color: "#D4AF37" }} />
         <h2>REVIEWS</h2>
         <button className="gold-btn" onClick={() => setShowWrite(true)}><Edit3 size={14} /> Write Review</button>
+      </div>
+
+      {/* Search bar */}
+      <div style={{ position: "relative", marginBottom: 12 }}>
+        <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#6B6152" }} />
+        <input
+          className="text-input"
+          style={{ paddingLeft: 34 }}
+          placeholder="Search by book title or author..."
+          value={bookSearch}
+          onChange={e => setBookSearch(e.target.value)}
+        />
+        {bookSearch && (
+          <button
+            onClick={() => setBookSearch("")}
+            style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#6B6152", cursor: "pointer", padding: 2 }}
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
+      {/* Sort toggle */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <button className={`filter-btn ${sortBy === "recent" ? "active" : ""}`} onClick={() => setSortBy("recent")}>
+          <Clock size={12} /> Recent
+        </button>
+        <button className={`filter-btn ${sortBy === "most_liked" ? "active" : ""}`} onClick={() => setSortBy("most_liked")}>
+          <Heart size={12} /> Most Liked
+        </button>
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
@@ -3463,18 +3531,26 @@ function ReviewsPage() {
           <Panel>
             <div style={{ textAlign: "center", padding: "40px 20px" }}>
               <Star size={36} style={{ color: "#2A2520", marginBottom: 12 }} />
-              <div style={{ color: "#6B6152", fontSize: 15, fontWeight: 600, marginBottom: 6 }}>No reviews yet</div>
-              <div style={{ color: "#4A4235", fontSize: 13, maxWidth: 320, margin: "0 auto" }}>
-                Be the first to share your thoughts on a book. Your review helps the fireteam decide what to read next.
+              <div style={{ color: "#6B6152", fontSize: 15, fontWeight: 600, marginBottom: 6 }}>
+                {bookSearch.trim() ? "No reviews found" : "No reviews yet"}
               </div>
-              <button className="gold-btn" style={{ marginTop: 16 }} onClick={() => setShowWrite(true)}>
-                <Edit3 size={14} /> Write the First Review
-              </button>
+              <div style={{ color: "#4A4235", fontSize: 13, maxWidth: 320, margin: "0 auto" }}>
+                {bookSearch.trim()
+                  ? `No reviews match "${bookSearch}". Try a different search.`
+                  : "Be the first to share your thoughts on a book. Your review helps the fireteam decide what to read next."}
+              </div>
+              {!bookSearch.trim() && (
+                <button className="gold-btn" style={{ marginTop: 16 }} onClick={() => setShowWrite(true)}>
+                  <Edit3 size={14} /> Write the First Review
+                </button>
+              )}
             </div>
           </Panel>
         ) : reviews.map(review => {
           const book = data.books.find(b => b.id === review.bookId);
           const member = findMember(data, review.memberId);
+          const likes = getLikes(review.id);
+          const liked = likes.includes(currentUser.id);
           return (
             <Panel key={review.id} className="review-card">
               <div className="review-header">
@@ -3490,13 +3566,20 @@ function ReviewsPage() {
                 <div style={{ marginLeft: "auto" }}><StarRating rating={review.rating} size={14} /></div>
               </div>
               <p className="review-text"><ScriptureText text={review.text} /></p>
-              {(isAdmin || review.memberId === currentUser.id) && (
-                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+              <div className="review-footer">
+                <button
+                  className={`review-like-btn ${liked ? "liked" : ""}`}
+                  onClick={() => toggleLike(review.id)}
+                >
+                  <Heart size={14} fill={liked ? "currentColor" : "none"} />
+                  <span>{likes.length > 0 ? likes.length : ""}</span>
+                </button>
+                {(isAdmin || review.memberId === currentUser.id) && (
                   <button className="admin-delete-btn" onClick={() => setConfirmDelete(review.id)}>
                     <X size={12} /> Delete
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </Panel>
           );
         })}
@@ -5750,6 +5833,16 @@ select.text-input { cursor: pointer; }
 .review-date { color: var(--text-faint); font-size: 12px; }
 .review-book-info { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px; background: var(--bg-deep); border-radius: 4px; }
 .review-text { color: var(--text-secondary); font-size: 14px; line-height: 1.7; margin: 0; }
+.review-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
+.review-like-btn {
+  display: flex; align-items: center; gap: 5px;
+  background: none; border: 1px solid transparent; border-radius: 20px;
+  padding: 4px 12px; cursor: pointer;
+  font-family: 'Jost', sans-serif; font-size: 13px; font-weight: 500;
+  color: var(--text-muted); transition: all 0.2s;
+}
+.review-like-btn:hover { color: #C0392B; border-color: rgba(192, 57, 43, 0.25); background: rgba(192, 57, 43, 0.06); }
+.review-like-btn.liked { color: #C0392B; border-color: rgba(192, 57, 43, 0.3); background: rgba(192, 57, 43, 0.08); }
 
 /* ═══ FORUM ═══ */
 .thread-list { display: flex; flex-direction: column; gap: 12px; }
