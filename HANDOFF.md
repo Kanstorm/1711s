@@ -62,9 +62,11 @@ trust the repo, not the zip.
 | `rls_policies.sql` | **Canonical RLS policies for all 20 tables.** Idempotent — drops and recreates. Re-run after any policy change; edit this file, never hand-edit policies in the dashboard. |
 | `fix_bible_progress.sql`, `fix_group_reads_update.sql` | Historical one-time fixes, superseded by/absorbed into `rls_policies.sql` (bible unique constraint stands alone — already applied). |
 
-`.env.local` was purged from git history on 2026-07-03 and is now gitignored —
-fresh clones must create it by hand (`VITE_SUPABASE_URL`,
-`VITE_SUPABASE_ANON_KEY`); a copy lives in the OneDrive `1711.V3` folder.
+`.env.local` was purged from git history on 2026-07-03, the publishable key
+rotated, and the app is now **hosted on Vercel** with `VITE_SUPABASE_URL` and
+`VITE_SUPABASE_ANON_KEY` set as Vercel environment variables (env vars bake in
+at build time — changing them requires a redeploy). Fresh clones must create
+`.env.local` by hand; a current copy lives in the OneDrive `1711.V3` folder.
 RLS is the real security boundary (publishable keys are public by design).
 `node_modules`/`dist` are gitignored (fresh clones: `npm install`).
 
@@ -165,9 +167,7 @@ Open, roughly in priority order:
 3. **Sync-failure visibility** — sync errors only hit the console; surface a
    toast on failed writes.
 4. **Confession quiz** — build it or retire the "Catechized" triumph.
-5. Repo hygiene — history purge done (2026-07-03); key rotation in the
-   Supabase dashboard still pending (update `.env.local` + host env after).
-6. Ideas parked: reading plans/streaks, meeting scheduler, notifications
+5. Ideas parked: reading plans/streaks, meeting scheduler, notifications
    bell, group-read pacing.
 
 ---
