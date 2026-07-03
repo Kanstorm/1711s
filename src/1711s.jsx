@@ -2682,6 +2682,10 @@ function SlotOverlay({ oldValue, newValue, pagesAdded, bookTitle, pagesRemaining
   );
 }
 
+// Group reads whose completion has already been celebrated this session —
+// survives page switches so the toast/activity can't replay on every visit.
+const announcedGroupReads = new Set();
+
 function LibraryPage() {
   const { data, setData, currentUser, isAdmin, showToast } = useContext(AppContext);
   const [filter, setFilter] = useState("All");
@@ -2766,16 +2770,22 @@ function LibraryPage() {
     inv.status === "completed" && isParticipant(inv)
   ).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
-  // Auto-move finished group reads from active → completed (persists via syncChanges)
+  // Auto-move finished group reads from active → completed (persists via syncChanges).
+  // announcedGroupReads (module-level) makes the celebration fire at most once per
+  // session per read, so a failed DB write can't replay it on every Library visit.
   useEffect(() => {
-    const finished = (data.readInvites || []).filter(inv => inv.status === "active" && isGroupReadComplete(inv));
+    const finished = (data.readInvites || []).filter(inv =>
+      inv.status === "active" && isGroupReadComplete(inv) && !announcedGroupReads.has(inv.id)
+    );
     if (finished.length === 0) return;
+    finished.forEach(inv => announcedGroupReads.add(inv.id));
     const finishedIds = new Set(finished.map(inv => inv.id));
     setData(d => ({
       ...d,
       readInvites: (d.readInvites || []).map(inv => finishedIds.has(inv.id) ? { ...inv, status: "completed" } : inv),
+      // attribute to the current user — activities RLS only allows inserting your own rows
       activities: [...d.activities, ...finished.map((inv, i) => ({
-        id: `a${Date.now()}-gr${i}`, type: "group_complete", memberId: inv.fromId,
+        id: `a${Date.now()}-gr${i}`, type: "group_complete", memberId: currentUser.id,
         text: `completed a group read of "${data.books.find(b => b.id === inv.bookId)?.title || "a book"}" with the fireteam!`,
         date: new Date().toISOString().split("T")[0], icon: "🏁",
       }))],
