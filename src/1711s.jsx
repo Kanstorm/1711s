@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, createContext, useContext } from "react";
 import { BookOpen, MessageSquare, Trophy, Users, Star, ChevronRight, ChevronDown, Send, Flame, Search, Plus, X, Check, Clock, TrendingUp, Award, Bookmark, ArrowLeft, Heart, Zap, Eye, Edit3, Hash, Menu } from "lucide-react";
 import { supabase } from "./supabaseClient";
-import { loadAllData, syncChanges } from "./supabaseData";
+import { loadAllData, syncChanges, trackWrite, whenWritesSettled } from "./supabaseData";
 
 // Polyfill storage for browser (in-memory fallback if localStorage unavailable)
 if (!window.storage) {
@@ -1684,7 +1684,10 @@ function TriumphsPage() {
     const myReplies = data.threads.reduce((acc, t) => acc + t.posts.filter(p => p.authorId === uid && p.id !== t.posts[0]?.id).length, 0);
     const myRecs = (data.recommendations || []).filter(r => r.memberId === uid);
     const biblePrg = data.bibleProgress?.[uid] || {};
-    const bibleCompleted = Object.values(biblePrg).filter(v => v === true || v >= 1).length;
+    // A Bible book counts as read when every one of its chapters is checked off
+    const bibleCompleted = [...BIBLE_BOOKS.OT, ...BIBLE_BOOKS.NT]
+      .flatMap(cat => cat.books)
+      .filter(b => (biblePrg[b.name] || []).length >= b.ch).length;
 
     switch (triumph.type) {
       // ── BEREAN SEAL ──
@@ -3433,10 +3436,10 @@ function ReviewsPage() {
     }));
     // Sync to Supabase
     if (already) {
-      supabase.from("review_likes").delete().eq("review_id", reviewId).eq("user_id", currentUser.id)
+      trackWrite(supabase.from("review_likes").delete().eq("review_id", reviewId).eq("user_id", currentUser.id))
         .then(({ error }) => { if (error) console.error("Unlike error:", error); });
     } else {
-      supabase.from("review_likes").insert({ review_id: reviewId, user_id: currentUser.id })
+      trackWrite(supabase.from("review_likes").insert({ review_id: reviewId, user_id: currentUser.id }))
         .then(({ error }) => { if (error) console.error("Like error:", error); });
     }
   }
@@ -4459,9 +4462,9 @@ function DirectorPage() {
         }],
       }));
       // Write prestige directly to Supabase
-      supabase.from("bible_progress").delete().eq("user_id", currentUser.id)
+      trackWrite(supabase.from("bible_progress").delete().eq("user_id", currentUser.id))
         .then(({ error }) => { if (error) console.error("Prestige clear error:", error); });
-      supabase.from("profiles").update({ prestige_level: newLvl }).eq("id", currentUser.id)
+      trackWrite(supabase.from("profiles").update({ prestige_level: newLvl }).eq("id", currentUser.id))
         .then(({ error }) => { if (error) console.error("Prestige update error:", error); });
     }, delay);
   }
@@ -4472,35 +4475,36 @@ function DirectorPage() {
   }
 
   function toggleChapter(bookName, chNum) {
-    const current = data.bibleProgress?.[currentUser.id]?.[bookName] || [];
-    const removing = current.includes(chNum);
+    const removing = (data.bibleProgress?.[currentUser.id]?.[bookName] || []).includes(chNum);
 
-    // Update local state
+    // Update local state (read from `d`, not the render snapshot, so rapid clicks don't lose chapters)
     setData(d => {
       const userBp = { ...(d.bibleProgress?.[currentUser.id] || {}) };
+      const current = userBp[bookName] || [];
       if (removing) {
         userBp[bookName] = current.filter(c => c !== chNum);
       } else {
-        userBp[bookName] = [...current, chNum].sort((a, b) => a - b);
+        userBp[bookName] = [...new Set([...current, chNum])].sort((a, b) => a - b);
       }
       return { ...d, bibleProgress: { ...d.bibleProgress, [currentUser.id]: userBp } };
     });
 
     // Write directly to Supabase
     if (removing) {
-      supabase.from("bible_progress").delete()
-        .eq("user_id", currentUser.id).eq("book_name", bookName).eq("chapter", chNum)
+      trackWrite(supabase.from("bible_progress").delete()
+        .eq("user_id", currentUser.id).eq("book_name", bookName).eq("chapter", chNum))
         .then(({ error }) => { if (error) console.error("Bible toggle error:", error); });
     } else {
-      supabase.from("bible_progress").upsert({
-        user_id: currentUser.id, book_name: bookName, chapter: chNum,
-      }).then(({ error }) => { if (error) console.error("Bible toggle error:", error); });
+      trackWrite(supabase.from("bible_progress").upsert(
+        { user_id: currentUser.id, book_name: bookName, chapter: chNum },
+        { onConflict: "user_id,book_name,chapter", ignoreDuplicates: true }
+      )).then(({ error }) => { if (error) console.error("Bible toggle error:", error); });
     }
   }
 
   function markAllChapters(bookName, totalCh) {
     const current = data.bibleProgress?.[currentUser.id]?.[bookName] || [];
-    const clearing = current.length === totalCh;
+    const clearing = current.length >= totalCh;
 
     // Update local state
     setData(d => {
@@ -4515,20 +4519,18 @@ function DirectorPage() {
 
     // Write directly to Supabase
     if (clearing) {
-      supabase.from("bible_progress").delete()
-        .eq("user_id", currentUser.id).eq("book_name", bookName)
+      trackWrite(supabase.from("bible_progress").delete()
+        .eq("user_id", currentUser.id).eq("book_name", bookName))
         .then(({ error }) => { if (error) console.error("Bible markAll error:", error); });
     } else {
+      // Single conflict-aware upsert: inserts only the missing chapters,
+      // no delete-then-insert window that could drop progress mid-flight.
       const rows = Array.from({ length: totalCh }, (_, i) => ({
         user_id: currentUser.id, book_name: bookName, chapter: i + 1,
       }));
-      // Delete existing then insert all
-      supabase.from("bible_progress").delete()
-        .eq("user_id", currentUser.id).eq("book_name", bookName)
-        .then(() => {
-          supabase.from("bible_progress").upsert(rows)
-            .then(({ error }) => { if (error) console.error("Bible markAll error:", error); });
-        });
+      trackWrite(supabase.from("bible_progress").upsert(rows, {
+        onConflict: "user_id,book_name,chapter", ignoreDuplicates: true,
+      })).then(({ error }) => { if (error) console.error("Bible markAll error:", error); });
     }
   }
 
@@ -4778,13 +4780,19 @@ function DirectorPage() {
             {totalPct < 100 && (
               <button style={{ marginLeft: "auto", padding: "4px 10px", fontSize: 9, background: "#2A2520", border: "1px solid #3A3428", color: "#6B6152", borderRadius: 3, cursor: "pointer", fontFamily: "'Rajdhani', sans-serif", letterSpacing: 1 }}
                 onClick={() => {
+                  const allBooks = [...BIBLE_BOOKS.OT, ...BIBLE_BOOKS.NT].flatMap(cat => cat.books);
                   setData(d => {
                     const allBp = {};
-                    [...BIBLE_BOOKS.OT, ...BIBLE_BOOKS.NT].forEach(cat => {
-                      cat.books.forEach(b => { allBp[b.name] = Array.from({ length: b.ch }, (_, i) => i + 1); });
-                    });
+                    allBooks.forEach(b => { allBp[b.name] = Array.from({ length: b.ch }, (_, i) => i + 1); });
                     return { ...d, bibleProgress: { ...d.bibleProgress, [currentUser.id]: allBp } };
                   });
+                  // syncChanges skips bibleProgress, so persist directly like toggleChapter does
+                  const rows = allBooks.flatMap(b => Array.from({ length: b.ch }, (_, i) => ({
+                    user_id: currentUser.id, book_name: b.name, chapter: i + 1,
+                  })));
+                  trackWrite(supabase.from("bible_progress").upsert(rows, {
+                    onConflict: "user_id,book_name,chapter", ignoreDuplicates: true,
+                  })).then(({ error }) => { if (error) console.error("Bible complete-all error:", error); });
                 }}>
                 DEBUG: COMPLETE ALL
               </button>
@@ -6882,16 +6890,17 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Wrap setData to auto-sync changes to Supabase
+  // Wrap setData to auto-sync changes to Supabase.
+  // Side effects must stay OUTSIDE the setData updater: React (especially in
+  // StrictMode) may invoke updaters twice, which fired syncChanges twice and
+  // could insert duplicate rows. dataRef always holds the latest data.
   function setDataSynced(updater) {
-    setData(prev => {
-      const newVal = typeof updater === "function" ? updater(prev) : updater;
-      const oldSnapshot = dataRef.current;
-      dataRef.current = newVal;
-      // Async sync — don't block the UI
-      if (oldSnapshot) syncChanges(oldSnapshot, newVal);
-      return newVal;
-    });
+    const prev = dataRef.current;
+    const newVal = typeof updater === "function" ? updater(prev) : updater;
+    dataRef.current = newVal;
+    setData(newVal);
+    // Async sync — don't block the UI
+    if (prev) trackWrite(syncChanges(prev, newVal));
   }
 
   // ── Logout ──
@@ -6952,11 +6961,15 @@ export default function App() {
     setPage(id);
     setProfileTarget(null);
     setMobileMenuOpen(false);
-    // Re-fetch data from Supabase on every page change
-    loadAllData().then(allData => {
-      setData(allData);
-      dataRef.current = allData;
-    }).catch(err => console.error("Refresh error:", err));
+    // Re-fetch data from Supabase on every page change — but only after all
+    // in-flight writes settle, so the reload can't return stale rows and
+    // wipe out changes the user just made.
+    whenWritesSettled()
+      .then(() => loadAllData())
+      .then(allData => {
+        setData(allData);
+        dataRef.current = allData;
+      }).catch(err => console.error("Refresh error:", err));
   }
 
   return (

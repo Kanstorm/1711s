@@ -1,11 +1,34 @@
 import { supabase } from "./supabaseClient";
 
+// Supabase caps queries at 1000 rows; page through so large tables
+// (especially bible_progress — 1,189 rows per completed Bible) load fully.
 async function q(table, options = {}) {
-  let query = supabase.from(table).select("*");
-  if (options.order) query = query.order(options.order, { ascending: options.asc ?? true });
-  const { data, error } = await query;
-  if (error) console.warn(`Query failed for ${table}:`, error.message);
-  return data || [];
+  const PAGE = 1000;
+  const all = [];
+  for (let from = 0; ; from += PAGE) {
+    let query = supabase.from(table).select("*").range(from, from + PAGE - 1);
+    if (options.order) query = query.order(options.order, { ascending: options.asc ?? true });
+    const { data, error } = await query;
+    if (error) { console.warn(`Query failed for ${table}:`, error.message); break; }
+    all.push(...(data || []));
+    if (!data || data.length < PAGE) break;
+  }
+  return all;
+}
+
+// ── Pending-write tracking ─────────────────────────────────────────
+// Direct Supabase writes (bible progress, syncChanges, etc.) are fire-and-
+// forget. navTo() reloads all data on navigation, which can read the DB
+// before those writes commit and clobber fresh local state. Track every
+// write so callers can wait for them to settle before refetching.
+const pendingWrites = new Set();
+export function trackWrite(promise) {
+  const p = Promise.resolve(promise).finally(() => pendingWrites.delete(p));
+  pendingWrites.add(p);
+  return p;
+}
+export function whenWritesSettled() {
+  return Promise.allSettled([...pendingWrites]);
 }
 
 export async function loadAllData() {
@@ -69,7 +92,7 @@ export async function loadAllData() {
   const grMessagesMap = {}; groupReadMessages.forEach(m => { if (!grMessagesMap[m.group_read_id]) grMessagesMap[m.group_read_id] = []; grMessagesMap[m.group_read_id].push({ id: m.id, authorId: m.author_id, text: m.body, date: m.created_at?.split("T")[0] || "", time: m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "" }); });
   const readInvitesArr = groupReads.map(gr => { const members = grMembersMap[gr.id] || []; return { id: gr.id, bookId: gr.book_id, fromId: gr.from_id, invitedIds: members.filter(m => m.status === "invited").map(m => m.user_id), acceptedIds: members.filter(m => m.status === "accepted").map(m => m.user_id), declinedIds: members.filter(m => m.status === "declined").map(m => m.user_id), note: gr.note || "", messages: grMessagesMap[gr.id] || [], date: gr.created_at?.split("T")[0] || "", status: gr.status }; });
   // Bible progress
-  const bpObj = {}; bibleProgress.forEach(bp => { if (!bpObj[bp.user_id]) bpObj[bp.user_id] = {}; if (!bpObj[bp.user_id][bp.book_name]) bpObj[bp.user_id][bp.book_name] = []; bpObj[bp.user_id][bp.book_name].push(bp.chapter); }); Object.values(bpObj).forEach(userBp => { Object.keys(userBp).forEach(bn => userBp[bn].sort((a, b) => a - b)); });
+  const bpObj = {}; bibleProgress.forEach(bp => { if (!bpObj[bp.user_id]) bpObj[bp.user_id] = {}; if (!bpObj[bp.user_id][bp.book_name]) bpObj[bp.user_id][bp.book_name] = []; if (!bpObj[bp.user_id][bp.book_name].includes(bp.chapter)) bpObj[bp.user_id][bp.book_name].push(bp.chapter); }); Object.values(bpObj).forEach(userBp => { Object.keys(userBp).forEach(bn => userBp[bn].sort((a, b) => a - b)); });
   // Profile fields
   const displayNamesObj = {}, equippedTitlesObj = {}, prestigeObj = {};
   profiles.forEach(p => { displayNamesObj[p.id] = p.display_name; if (p.equipped_title) equippedTitlesObj[p.id] = p.equipped_title; if (p.prestige_level > 0) prestigeObj[p.id] = p.prestige_level; });
@@ -118,7 +141,7 @@ export async function syncChanges(oldData, newData) {
     for (const uid of Object.keys(oldData.friends || {})) { const nf = new Set(newData.friends?.[uid] || []); for (const fid of (oldData.friends[uid] || [])) { if (!nf.has(fid)) p.push(supabase.from("friendships").delete().eq("user_id", uid).eq("friend_id", fid)); } }
     // Friend requests
     const oldFrMap = new Map(oldData.friendRequests.map(fr => [fr.id, fr])), newFrIds2 = new Set(newData.friendRequests.map(fr => fr.id));
-    for (const fr of newData.friendRequests) { const old = oldFrMap.get(fr.id); if (!old) p.push(supabase.from("friend_requests").insert({ from_id: fr.fromId, to_id: fr.toId }).select().single().then(({ data: s }) => { if (s) fr.id = s.id; })); else if (old.status !== fr.status) p.push(supabase.from("friend_requests").update({ status: fr.status }).eq("id", fr.id)); }
+    for (const fr of newData.friendRequests) { const old = oldFrMap.get(fr.id); if (!old) p.push(supabase.from("friend_requests").insert({ from_id: fr.fromId, to_id: fr.toId, status: fr.status || "pending" }).select().single().then(({ data: s }) => { if (s) fr.id = s.id; })); else if (old.status !== fr.status) p.push(supabase.from("friend_requests").update({ status: fr.status }).eq("id", fr.id)); }
     for (const fr of oldData.friendRequests) { if (!newFrIds2.has(fr.id)) p.push(supabase.from("friend_requests").delete().eq("id", fr.id)); }
     // Custom seals
     const oldSIds = new Set(oldData.customSeals.map(s => s.id)), newSIds = new Set(newData.customSeals.map(s => s.id));
@@ -143,7 +166,7 @@ export async function syncChanges(oldData, newData) {
     // Group reads
     const oldInvIds = new Set(oldData.readInvites.map(i => i.id));
     for (const inv of newData.readInvites) {
-      if (!oldInvIds.has(inv.id)) { p.push(supabase.from("group_reads").insert({ book_id: inv.bookId, from_id: inv.fromId, note: inv.note || null }).select().single().then(async ({ data: s }) => { if (s) { inv.id = s.id; if (inv.invitedIds?.length) await supabase.from("group_read_members").insert(inv.invitedIds.map(uid => ({ group_read_id: s.id, user_id: uid, status: "invited" }))); } })); }
+      if (!oldInvIds.has(inv.id)) { p.push(supabase.from("group_reads").insert({ book_id: inv.bookId, from_id: inv.fromId, note: inv.note || null, status: inv.status || "active" }).select().single().then(async ({ data: s }) => { if (s) { inv.id = s.id; if (inv.invitedIds?.length) await supabase.from("group_read_members").insert(inv.invitedIds.map(uid => ({ group_read_id: s.id, user_id: uid, status: "invited" }))); } })); }
       else { const oi = oldData.readInvites.find(x => x.id === inv.id); if (oi) { for (const uid of inv.acceptedIds) { if (!oi.acceptedIds.includes(uid)) p.push(supabase.from("group_read_members").update({ status: "accepted" }).eq("group_read_id", inv.id).eq("user_id", uid)); } for (const uid of inv.declinedIds) { if (!oi.declinedIds.includes(uid)) p.push(supabase.from("group_read_members").update({ status: "declined" }).eq("group_read_id", inv.id).eq("user_id", uid)); } const omIds = new Set(oi.messages.map(m => m.id)); for (const msg of inv.messages) { if (!omIds.has(msg.id)) p.push(supabase.from("group_read_messages").insert({ group_read_id: inv.id, author_id: msg.authorId, body: msg.text }).select().single().then(({ data: s }) => { if (s) msg.id = s.id; })); } } }
     }
     // Bible progress — handled directly in toggleChapter/markAllChapters/prestige, skip sync
