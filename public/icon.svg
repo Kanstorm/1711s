@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 17:11s app icon — gold seal ring + wordmark, fits the PWA maskable safe zone (r <= 205) -->
+  <rect width="512" height="512" fill="#0B0A08"/>
+  <circle cx="256" cy="256" r="185" fill="none" stroke="#D4AF37" stroke-width="6"/>
+  <circle cx="256" cy="256" r="170" fill="none" stroke="#D4AF37" stroke-opacity="0.25" stroke-width="2"/>
+  <!-- compass diamonds breaking the ring -->
+  <g fill="#0B0A08" stroke="#D4AF37" stroke-width="4" stroke-linejoin="round">
+    <polygon points="256,57 270,71 256,85 242,71"/>
+    <polygon points="256,427 270,441 256,455 242,441"/>
+    <polygon points="57,256 71,242 85,256 71,270"/>
+    <polygon points="427,256 441,242 455,256 441,270"/>
+  </g>
+  <!-- "17:11" wordmark drawn with strokes (no font dependency) -->
+  <g stroke="#D4AF37" stroke-width="18" stroke-linecap="square" fill="none">
+    <path d="M139 216 L154 197"/>
+    <path d="M154 196 L154 316"/>
+    <path d="M189 196 L249 196"/>
+    <path d="M249 196 L211 316"/>
+    <path d="M309 216 L324 197"/>
+    <path d="M324 196 L324 316"/>
+    <path d="M359 216 L374 197"/>
+    <path d="M374 196 L374 316"/>
+  </g>
+  <!-- colon as twin diamonds, teal accent -->
+  <g fill="#2B9EB3">
+    <polygon points="279,218 292,231 279,244 266,231"/>
+    <polygon points="279,268 292,281 279,294 266,281"/>
+  </g>
+</svg>
