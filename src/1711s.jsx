@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, createContext, useContext } from "react";
-import { BookOpen, MessageSquare, Trophy, Users, Star, ChevronRight, ChevronDown, Send, Flame, Search, Plus, X, Check, Clock, TrendingUp, Award, Bookmark, ArrowLeft, Heart, Zap, Eye, Edit3, Hash, Menu } from "lucide-react";
+import { BookOpen, MessageSquare, Trophy, Users, Star, ChevronRight, ChevronDown, Send, Flame, Search, Plus, X, Check, Clock, TrendingUp, Award, Bookmark, ArrowLeft, Heart, Zap, Eye, Edit3, Hash, Menu, Smartphone, Share } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import { loadAllData, syncChanges, trackWrite, whenWritesSettled } from "./supabaseData";
 
@@ -5570,6 +5570,8 @@ body, #root {
   background: linear-gradient(180deg, #1A1614 0%, #141210 100%);
   border-bottom: 1px solid var(--border-subtle);
   padding: 0 24px;
+  /* keep header content below the iPhone notch/Dynamic Island (PWA draws edge-to-edge) */
+  padding-top: env(safe-area-inset-top);
   position: sticky; top: 0; z-index: 100;
 }
 .header-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; height: 60px; }
@@ -6273,7 +6275,8 @@ select.text-input { cursor: pointer; }
   display: none; position: fixed; top: 0; right: 0; bottom: 0; width: 280px;
   background: #141210; border-left: 1px solid var(--border-subtle);
   z-index: 200; transform: translateX(100%); transition: transform 0.3s ease;
-  flex-direction: column; padding: 20px 0; overflow-y: auto;
+  flex-direction: column; overflow-y: auto;
+  padding: calc(20px + env(safe-area-inset-top)) 0 calc(20px + env(safe-area-inset-bottom));
 }
 .mobile-menu.open { transform: translateX(0); }
 .mobile-menu-user {
@@ -6344,7 +6347,7 @@ select.text-input { cursor: pointer; }
   .header-user-name { display: none; }
 
   /* ═══ HEADER ═══ */
-  .header { padding: 0 12px; }
+  .header { padding: 0 12px; padding-top: env(safe-area-inset-top); }
   .header-inner { height: 52px; }
   .logo { font-size: 24px; margin-right: auto; letter-spacing: 2px; }
 
@@ -6889,6 +6892,64 @@ function AuthScreen() {
   );
 }
 
+// ════════════════════════════════════════
+// PAGE: INSTALL (add to home screen guide)
+// ════════════════════════════════════════
+function InstallPage() {
+  const isInstalled = typeof window !== "undefined" &&
+    (window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true);
+
+  const Step = ({ n, children }) => (
+    <div style={{ display: "flex", gap: 14, alignItems: "flex-start", marginBottom: 14 }}>
+      <div style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid #D4AF37", color: "#D4AF37", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, fontFamily: "'Rajdhani', sans-serif", flexShrink: 0 }}>{n}</div>
+      <div style={{ color: "#C8BFA8", fontSize: 14, lineHeight: 1.6, paddingTop: 3 }}>{children}</div>
+    </div>
+  );
+
+  return (
+    <div className="page-content" style={{ maxWidth: 640, margin: "0 auto" }}>
+      <div className="page-header">
+        <Smartphone size={24} style={{ color: "#D4AF37" }} />
+        <h2>INSTALL THE APP</h2>
+      </div>
+      <p style={{ color: "#A09880", fontSize: 14, lineHeight: 1.7, margin: "0 0 20px" }}>
+        Add 17:11s to your phone's home screen and it behaves like a regular app —
+        its own gold icon, full-screen with no browser bars, and faster loading.
+        No app store needed, and it takes about ten seconds.
+      </p>
+
+      {isInstalled && (
+        <Panel style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#27AE60", fontFamily: "'Rajdhani', sans-serif", fontWeight: 700, fontSize: 14, letterSpacing: 1 }}>
+            <Check size={18} /> ALREADY INSTALLED — YOU'RE USING THE APP RIGHT NOW
+          </div>
+        </Panel>
+      )}
+
+      <Panel style={{ marginBottom: 16 }}>
+        <div className="section-title" style={{ display: "block", marginBottom: 16 }}>◆ IPHONE &amp; IPAD (SAFARI)</div>
+        <Step n={1}>Open this site in <b style={{ color: "#E8E0D0" }}>Safari</b>. (It has to be Safari — Chrome on iPhone can't install apps.)</Step>
+        <Step n={2}>Tap the <b style={{ color: "#E8E0D0" }}>Share</b> button <Share size={14} style={{ verticalAlign: "-2px", color: "#2B9EB3" }} /> — the square with the arrow pointing up, at the bottom center of the screen.</Step>
+        <Step n={3}>Scroll down the list and tap <b style={{ color: "#E8E0D0" }}>Add to Home Screen</b>.</Step>
+        <Step n={4}>Tap <b style={{ color: "#E8E0D0" }}>Add</b> in the top-right corner. The gold 17:11s icon appears on your home screen.</Step>
+      </Panel>
+
+      <Panel style={{ marginBottom: 16 }}>
+        <div className="section-title" style={{ display: "block", marginBottom: 16 }}>◆ ANDROID (CHROME)</div>
+        <Step n={1}>Open this site in <b style={{ color: "#E8E0D0" }}>Chrome</b>.</Step>
+        <Step n={2}>Tap the <b style={{ color: "#E8E0D0" }}>⋮ menu</b> in the top-right corner.</Step>
+        <Step n={3}>Tap <b style={{ color: "#E8E0D0" }}>Add to Home screen</b> — on some phones it says <b style={{ color: "#E8E0D0" }}>Install app</b>.</Step>
+        <Step n={4}>Confirm, and the icon lands on your home screen.</Step>
+      </Panel>
+
+      <p style={{ color: "#6B6152", fontSize: 12, lineHeight: 1.6, margin: 0 }}>
+        Once installed, launch it from the icon like any other app. Updates arrive
+        automatically — no need to reinstall.
+      </p>
+    </div>
+  );
+}
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -7131,6 +7192,12 @@ export default function App() {
             </button>
           ))}
           <div className="mobile-menu-divider" />
+          <button
+            className={`mobile-menu-item ${page === "install" ? "active" : ""}`}
+            onClick={() => navTo("install")}
+          >
+            <Smartphone size={14} /> <span>Install App</span>
+          </button>
           <button className="mobile-menu-item mobile-menu-signout" onClick={() => { logout(); setMobileMenuOpen(false); }}>
             <ArrowLeft size={14} /> <span>Sign Out</span>
           </button>
@@ -7145,11 +7212,15 @@ export default function App() {
           {page === "forum" && <ForumPage />}
           {page === "members" && <MembersPage />}
           {page === "profile" && <ProfilePage />}
+          {page === "install" && <InstallPage />}
         </main>
 
-        <footer style={{ textAlign: "center", padding: "24px 16px", borderTop: "1px solid #2A2520" }}>
+        <footer style={{ textAlign: "center", padding: "24px 16px calc(24px + env(safe-area-inset-bottom))", borderTop: "1px solid #2A2520" }}>
           <div style={{ color: "#4A4235", fontSize: 11, letterSpacing: 2, fontFamily: "'Rajdhani', sans-serif" }}>
             17:11s · EXAMINING THE SCRIPTURES DAILY · ACTS 17:11
+          </div>
+          <div style={{ color: "#4A4235", fontSize: 10, marginTop: 6, cursor: "pointer" }} onClick={() => navTo("install")}>
+            Install on your phone
           </div>
           <div style={{ color: "#33302A", fontSize: 10, marginTop: 4, cursor: "pointer" }} onClick={logout}>
             Sign out
