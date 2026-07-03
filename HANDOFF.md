@@ -62,9 +62,10 @@ trust the repo, not the zip.
 | `rls_policies.sql` | **Canonical RLS policies for all 20 tables.** Idempotent — drops and recreates. Re-run after any policy change; edit this file, never hand-edit policies in the dashboard. |
 | `fix_bible_progress.sql`, `fix_group_reads_update.sql` | Historical one-time fixes, superseded by/absorbed into `rls_policies.sql` (bible unique constraint stands alone — already applied). |
 
-⚠️ `.env.local` is still committed and the repo is public. RLS is the real
-security boundary (publishable keys are public by design), but removing it
-from git history + rotating the key remains good hygiene.
+`.env.local` was purged from git history on 2026-07-03 and is now gitignored —
+fresh clones must create it by hand (`VITE_SUPABASE_URL`,
+`VITE_SUPABASE_ANON_KEY`); a copy lives in the OneDrive `1711.V3` folder.
+RLS is the real security boundary (publishable keys are public by design).
 `node_modules`/`dist` are gitignored (fresh clones: `npm install`).
 
 **Deps:** `react`, `@supabase/supabase-js`, `lucide-react`, `vite-plugin-pwa`.
@@ -164,7 +165,8 @@ Open, roughly in priority order:
 3. **Sync-failure visibility** — sync errors only hit the console; surface a
    toast on failed writes.
 4. **Confession quiz** — build it or retire the "Catechized" triumph.
-5. Repo hygiene — purge `.env.local` from history, rotate key.
+5. Repo hygiene — history purge done (2026-07-03); key rotation in the
+   Supabase dashboard still pending (update `.env.local` + host env after).
 6. Ideas parked: reading plans/streaks, meeting scheduler, notifications
    bell, group-read pacing.
 
