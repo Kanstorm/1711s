@@ -2702,6 +2702,7 @@ function LibraryPage() {
   const [editingBook, setEditingBook] = useState(null);
   const [confirmDeleteBook, setConfirmDeleteBook] = useState(null);
   const [slotAnim, setSlotAnim] = useState(null); // { oldValue, newValue, pagesAdded, bookTitle }
+  const [showCompletedReads, setShowCompletedReads] = useState(false);
 
   function startEditBook(book) {
     setEditingBook({ ...book });
@@ -2746,9 +2747,41 @@ function LibraryPage() {
     return true;
   });
 
+  const isParticipant = inv => inv.fromId === currentUser.id || inv.acceptedIds.includes(currentUser.id);
+
+  // A group read is complete once at least one invitee has joined and every
+  // participant (starter + accepted) has read the whole book.
+  function isGroupReadComplete(inv) {
+    const book = data.books.find(b => b.id === inv.bookId);
+    if (!book || !book.pages || inv.acceptedIds.length === 0) return false;
+    return [inv.fromId, ...inv.acceptedIds].every(
+      pId => (data.readingProgress?.[pId]?.[book.id] || 0) >= book.pages
+    );
+  }
+
   const activeGroupReads = (data.readInvites || []).filter(inv =>
-    inv.status === "active" && (inv.fromId === currentUser.id || inv.acceptedIds.includes(currentUser.id))
+    inv.status === "active" && isParticipant(inv)
   );
+  const completedGroupReads = (data.readInvites || []).filter(inv =>
+    inv.status === "completed" && isParticipant(inv)
+  ).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+  // Auto-move finished group reads from active → completed (persists via syncChanges)
+  useEffect(() => {
+    const finished = (data.readInvites || []).filter(inv => inv.status === "active" && isGroupReadComplete(inv));
+    if (finished.length === 0) return;
+    const finishedIds = new Set(finished.map(inv => inv.id));
+    setData(d => ({
+      ...d,
+      readInvites: (d.readInvites || []).map(inv => finishedIds.has(inv.id) ? { ...inv, status: "completed" } : inv),
+      activities: [...d.activities, ...finished.map((inv, i) => ({
+        id: `a${Date.now()}-gr${i}`, type: "group_complete", memberId: inv.fromId,
+        text: `completed a group read of "${data.books.find(b => b.id === inv.bookId)?.title || "a book"}" with the fireteam!`,
+        date: new Date().toISOString().split("T")[0], icon: "🏁",
+      }))],
+    }));
+    showToast("Group read complete! Moved to Completed Group Reads.");
+  }, [data.readingProgress, data.readInvites]);
 
   function addBook() {
     if (!newBook.title || !newBook.author || !newBook.pages) return;
@@ -3072,6 +3105,70 @@ function LibraryPage() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Completed Group Reads */}
+      {completedGroupReads.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <button
+            onClick={() => setShowCompletedReads(s => !s)}
+            style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+            <Check size={16} style={{ color: "#27AE60" }} />
+            <span className="section-title">COMPLETED GROUP READS ({completedGroupReads.length})</span>
+            <ChevronDown size={16} style={{ color: "#6B6152", transform: showCompletedReads ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+          </button>
+          {showCompletedReads && (
+            <div className="group-reads-grid">
+              {completedGroupReads.map(inv => {
+                const book = data.books.find(b => b.id === inv.bookId);
+                if (!book) return null;
+                const allParticipants = [inv.fromId, ...inv.acceptedIds];
+                const from = findMember(data, inv.fromId);
+                return (
+                  <Panel key={inv.id} className="group-read-card" glow="#27AE60">
+                    <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
+                      <span style={{ fontSize: 32 }}><BookCover book={book} size={32} /></span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, color: "#E8E0D0", fontSize: 15 }}>{book.title}</div>
+                        <div style={{ color: "#6B6152", fontSize: 12 }}>{book.author} · {book.pages} pages</div>
+                        <div style={{ color: "#27AE60", fontSize: 11, marginTop: 4, fontFamily: "'Rajdhani', sans-serif", fontWeight: 600, letterSpacing: 1 }}>
+                          STARTED BY {from?.name?.toUpperCase()} · {inv.date}
+                        </div>
+                      </div>
+                      <span style={{ color: "#27AE60", fontSize: 10, fontWeight: 700, fontFamily: "'Rajdhani', sans-serif", letterSpacing: 1, border: "1px solid #27AE6044", borderRadius: 3, padding: "3px 8px", height: "fit-content", background: "rgba(39,174,96,0.08)" }}>
+                        ✔ COMPLETED
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                      {allParticipants.map(pId => {
+                        const member = findMember(data, pId);
+                        if (!member) return null;
+                        return (
+                          <div key={pId} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                            <div className="avatar" style={{ width: 22, height: 22, fontSize: 8 }}>{member.avatar}</div>
+                            <span style={{ color: "#C8BFA8", fontSize: 12 }}>{member.name}</span>
+                            <span style={{ color: "#27AE60", fontSize: 11 }}>✔</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button
+                      className="gr-open-chat-btn"
+                      onClick={() => setSelectedGroupRead(inv.id)}
+                    >
+                      <MessageSquare size={14} />
+                      <span>Open Discussion</span>
+                      {(inv.messages || []).length > 0 && (
+                        <span className="gr-msg-count">{(inv.messages || []).length}</span>
+                      )}
+                      <ChevronRight size={14} style={{ marginLeft: "auto", color: "#6B6152" }} />
+                    </button>
+                  </Panel>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
