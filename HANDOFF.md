@@ -16,9 +16,13 @@ language borrows heavily from Destiny 2: **Seals**, **Triumphs**, **Prestige**,
 
 Core features:
 
-- **Auth** — Supabase email/password sign-up & login, email confirmation flow.
-  Profiles are created by a **database trigger** on signup (display_name passed
-  via `options.data`), not by a client insert. ⚠️ No password-reset flow yet.
+- **Auth** — Supabase email/password sign-up & login, email confirmation flow,
+  and password reset ("Forgot password?" → `resetPasswordForEmail` →
+  `PASSWORD_RECOVERY` event / `type=recovery` hash → `ResetPasswordScreen`
+  calls `updateUser`). The recovery redirect uses `window.location.origin`, so
+  the deployed domain must be in Supabase's auth Redirect URLs. Profiles are
+  created by a **database trigger** on signup (display_name passed via
+  `options.data`), not by a client insert.
 - **Library** — books with reading progress (slot-machine page counter), cover
   art fetched from OpenLibrary. Any member adds books; only admins edit/delete.
 - **Group Reads** — invite members to read a book together, per-group chat.
@@ -149,21 +153,19 @@ InstallPage, App root (~7050).
 
 Recently shipped: bible tracker persistence fixes, group-read completed
 section, PWA + official logo, install guide page, safe-area/notch fix,
-RLS policy script.
+RLS policy script, password reset flow.
 
 Open, roughly in priority order:
 1. **Confirm `rls_policies.sql` has been run** and re-test the app as admin
    and as a normal member (silent zero-row writes were widespread before).
-2. **Password reset** — members have no recovery path
-   (`supabase.auth.resetPasswordForEmail` + a screen).
-3. **Realtime** — an older snapshot had live forum updates via
+2. **Realtime** — an older snapshot had live forum updates via
    `supabase.channel`; that code is NOT in the repo. Group-read chat has
    never had realtime (messages appear only after navigation).
-4. **Sync-failure visibility** — sync errors only hit the console; surface a
+3. **Sync-failure visibility** — sync errors only hit the console; surface a
    toast on failed writes.
-5. **Confession quiz** — build it or retire the "Catechized" triumph.
-6. Repo hygiene — purge `.env.local` from history, rotate key.
-7. Ideas parked: reading plans/streaks, meeting scheduler, notifications
+4. **Confession quiz** — build it or retire the "Catechized" triumph.
+5. Repo hygiene — purge `.env.local` from history, rotate key.
+6. Ideas parked: reading plans/streaks, meeting scheduler, notifications
    bell, group-read pacing.
 
 ---

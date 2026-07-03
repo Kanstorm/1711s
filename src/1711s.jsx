@@ -6720,13 +6720,19 @@ select.text-input { cursor: pointer; }
 `;
 
 function AuthScreen() {
-  const [mode, setMode] = useState("login"); // "login" or "signup"
+  const [mode, setMode] = useState("login"); // "login", "signup", or "forgot"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [error, setError] = useState(null);
+  // Surface auth errors passed back in the URL hash (e.g. an expired
+  // password-reset link redirects here with error_description set).
+  const [error, setError] = useState(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.hash.slice(1)).get("error_description");
+  });
   const [loading, setLoading] = useState(false);
   const [confirmSent, setConfirmSent] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -6756,6 +6762,55 @@ function AuthScreen() {
       setConfirmSent(true);
     }
     setLoading(false);
+  }
+
+  async function handleForgot(e) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    if (error) {
+      setError(error.message);
+    } else {
+      setResetSent(true);
+    }
+    setLoading(false);
+  }
+
+  if (resetSent) {
+    return (
+      <>
+        <style>{STYLES}</style>
+        <div className="login-screen">
+          <div className="login-logo">17:11s</div>
+          <div className="login-tagline">Examining the Scriptures Daily</div>
+          <div className="login-diamond">◆</div>
+          <div style={{
+            background: "var(--panel-bg)", border: "1px solid var(--border-subtle)",
+            borderRadius: 6, padding: "32px 24px", maxWidth: 400, width: "100%", textAlign: "center",
+          }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>✉</div>
+            <div style={{ color: "#E8E0D0", fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+              Check your email
+            </div>
+            <div style={{ color: "#8A7E6B", fontSize: 14, lineHeight: 1.6, marginBottom: 20 }}>
+              If an account exists for <span style={{ color: "#D4AF37" }}>{email}</span>,
+              we sent it a password reset link. Open it on this device and you'll be
+              asked to choose a new password.
+            </div>
+            <button
+              className="gold-btn"
+              style={{ width: "100%", justifyContent: "center" }}
+              onClick={() => { setResetSent(false); setMode("login"); setError(null); }}
+            >
+              Back to Sign In
+            </button>
+          </div>
+        </div>
+      </>
+    );
   }
 
   if (confirmSent) {
@@ -6833,7 +6888,13 @@ function AuthScreen() {
             </button>
           </div>
 
-          <form onSubmit={mode === "login" ? handleLogin : handleSignup}>
+          {mode === "forgot" && (
+            <div style={{ color: "#8A7E6B", fontSize: 13, lineHeight: 1.6, marginBottom: 16 }}>
+              Enter your account email and we'll send you a link to choose a new password.
+            </div>
+          )}
+
+          <form onSubmit={mode === "login" ? handleLogin : mode === "signup" ? handleSignup : handleForgot}>
             {mode === "signup" && (
               <>
                 <label className="input-label">Guardian Name</label>
@@ -6859,16 +6920,36 @@ function AuthScreen() {
               required
             />
 
-            <label className="input-label">Password</label>
-            <input
-              className="text-input"
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder={mode === "signup" ? "At least 6 characters" : "Your password"}
-              autoComplete={mode === "signup" ? "new-password" : "current-password"}
-              required
-            />
+            {mode !== "forgot" && (
+              <>
+                <label className="input-label">Password</label>
+                <input
+                  className="text-input"
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder={mode === "signup" ? "At least 6 characters" : "Your password"}
+                  autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                  required
+                />
+              </>
+            )}
+
+            {mode === "login" && (
+              <div style={{ textAlign: "right", marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => { setMode("forgot"); setError(null); }}
+                  style={{
+                    background: "none", border: "none", padding: 0, cursor: "pointer",
+                    color: "#6B6152", fontSize: 12, letterSpacing: 0.5,
+                    fontFamily: "'Jost', sans-serif", textDecoration: "underline",
+                  }}
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
 
             {error && (
               <div style={{
@@ -6889,9 +6970,148 @@ function AuthScreen() {
                 opacity: loading ? 0.6 : 1, pointerEvents: loading ? "none" : "auto",
               }}
             >
-              {loading ? "Please wait..." : mode === "login" ? "Sign In" : "Create Account"}
+              {loading ? "Please wait..." : mode === "login" ? "Sign In" : mode === "signup" ? "Create Account" : "Send Reset Link"}
             </button>
+
+            {mode === "forgot" && (
+              <div style={{ textAlign: "center", marginTop: 14 }}>
+                <button
+                  type="button"
+                  onClick={() => { setMode("login"); setError(null); }}
+                  style={{
+                    background: "none", border: "none", padding: 0, cursor: "pointer",
+                    color: "#6B6152", fontSize: 12, letterSpacing: 0.5,
+                    fontFamily: "'Jost', sans-serif", textDecoration: "underline",
+                  }}
+                >
+                  Back to Sign In
+                </button>
+              </div>
+            )}
           </form>
+        </div>
+
+        <div style={{ color: "#4A4235", fontSize: 12, marginTop: 24, letterSpacing: 1 }}>
+          ACTS 17:11 · EXAMINING THE SCRIPTURES DAILY
+        </div>
+      </div>
+    </>
+  );
+}
+
+// Shown after the user follows a password-recovery email link.
+// Supabase has already signed them in with a recovery session; this just
+// sets the new password via updateUser, then hands control back to App.
+function ResetPasswordScreen({ onDone }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError(null);
+    if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
+    if (password !== confirm) { setError("Passwords do not match"); return; }
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+      return;
+    }
+    setDone(true);
+    setLoading(false);
+  }
+
+  return (
+    <>
+      <style>{STYLES}</style>
+      <div className="login-screen">
+        <div className="login-logo">17:11s</div>
+        <div className="login-tagline">Examining the Scriptures Daily</div>
+        <div className="login-diamond">◆</div>
+
+        <div style={{
+          background: "var(--panel-bg)", border: "1px solid var(--border-subtle)",
+          borderRadius: 6, padding: "28px 24px", maxWidth: 400, width: "100%",
+          textAlign: done ? "center" : "left",
+        }}>
+          {done ? (
+            <>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>◆</div>
+              <div style={{ color: "#E8E0D0", fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+                Password updated
+              </div>
+              <div style={{ color: "#8A7E6B", fontSize: 14, lineHeight: 1.6, marginBottom: 20 }}>
+                Your new password is set and you're signed in.
+              </div>
+              <button
+                className="gold-btn"
+                style={{ width: "100%", justifyContent: "center" }}
+                onClick={onDone}
+              >
+                Enter 17:11s
+              </button>
+            </>
+          ) : (
+            <>
+              <div style={{
+                color: "#D4AF37", fontFamily: "'Rajdhani', sans-serif", fontWeight: 700,
+                fontSize: 13, letterSpacing: 2, marginBottom: 20,
+                paddingBottom: 10, borderBottom: "1px solid #2A2520",
+              }}>
+                CHOOSE A NEW PASSWORD
+              </div>
+
+              <form onSubmit={handleSubmit}>
+                <label className="input-label">New Password</label>
+                <input
+                  className="text-input"
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="At least 6 characters"
+                  autoComplete="new-password"
+                  required
+                />
+
+                <label className="input-label">Confirm New Password</label>
+                <input
+                  className="text-input"
+                  type="password"
+                  value={confirm}
+                  onChange={e => setConfirm(e.target.value)}
+                  placeholder="Type it again"
+                  autoComplete="new-password"
+                  required
+                />
+
+                {error && (
+                  <div style={{
+                    color: "#C0392B", fontSize: 13, marginTop: 12, padding: "8px 12px",
+                    background: "rgba(192,57,43,0.08)", borderRadius: 4,
+                    border: "1px solid rgba(192,57,43,0.2)",
+                  }}>
+                    {error}
+                  </div>
+                )}
+
+                <button
+                  className="gold-btn"
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    width: "100%", justifyContent: "center", marginTop: 20,
+                    opacity: loading ? 0.6 : 1, pointerEvents: loading ? "none" : "auto",
+                  }}
+                >
+                  {loading ? "Please wait..." : "Set New Password"}
+                </button>
+              </form>
+            </>
+          )}
         </div>
 
         <div style={{ color: "#4A4235", fontSize: 12, marginTop: 24, letterSpacing: 1 }}>
@@ -6968,6 +7188,12 @@ export default function App() {
   const [profileTarget, setProfileTarget] = useState(null);
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // True while the user is mid password-recovery (arrived via a reset email
+  // link). Initialized from the URL hash because the PASSWORD_RECOVERY event
+  // can fire before the listener below is subscribed.
+  const [recoveryMode, setRecoveryMode] = useState(() =>
+    typeof window !== "undefined" && window.location.hash.includes("type=recovery")
+  );
   const [toast, setToast] = useState(null);
   const toastTimeout = useRef(null);
 
@@ -7041,6 +7267,9 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log("Auth event:", event);
+        if (event === "PASSWORD_RECOVERY") {
+          setRecoveryMode(true);
+        }
         if (event === "SIGNED_IN" && session?.user && !initRef.current) {
           initRef.current = true;
           initApp(session.user.id);
@@ -7076,6 +7305,13 @@ export default function App() {
     await supabase.auth.signOut();
     setCurrentUser(null);
     setProfile(null);
+  }
+
+  // ── Password recovery (arrived via reset email link) ──
+  // Takes priority over everything: the recovery session signs the user in,
+  // but they must set a new password before entering the app.
+  if (recoveryMode) {
+    return <ResetPasswordScreen onDone={() => setRecoveryMode(false)} />;
   }
 
   // ── Loading state ──
