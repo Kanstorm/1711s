@@ -2705,6 +2705,7 @@ function LibraryPage() {
   const chatEndRef = useRef(null);
   const [editingBook, setEditingBook] = useState(null);
   const [confirmDeleteBook, setConfirmDeleteBook] = useState(null);
+  const [confirmRemoveBook, setConfirmRemoveBook] = useState(null);
   const [slotAnim, setSlotAnim] = useState(null); // { oldValue, newValue, pagesAdded, bookTitle }
   const [showCompletedReads, setShowCompletedReads] = useState(false);
   const [showCompletedBooks, setShowCompletedBooks] = useState(false);
@@ -2741,6 +2742,22 @@ function LibraryPage() {
     setConfirmDeleteBook(null);
     setSelectedBook(null);
     showToast(`"${book?.title}" deleted from library`, "info");
+  }
+
+  // Clears the current user's own progress on a book (returns it to Not
+  // Started) — the book itself stays in the library. The diff sync never
+  // sees removed keys, so the row is deleted from Supabase directly.
+  function removeFromMyBooks(bookId) {
+    const book = data.books.find(b => b.id === bookId);
+    setData(d => {
+      const mine = { ...(d.readingProgress?.[currentUser.id] || {}) };
+      delete mine[bookId];
+      return { ...d, readingProgress: { ...d.readingProgress, [currentUser.id]: mine } };
+    });
+    trackWrite(supabase.from("reading_progress").delete().eq("user_id", currentUser.id).eq("book_id", bookId));
+    setConfirmRemoveBook(null);
+    setSelectedBook(null);
+    showToast(`"${book?.title}" removed from your books`, "info");
   }
 
   // The search bar and category filters sit below Currently Reading and only
@@ -3457,6 +3474,18 @@ function LibraryPage() {
               </div>
               <ChevronRight size={16} style={{ marginLeft: "auto", color: "#6B6152" }} />
             </button>
+            {getProgress(selectedBook.id) > 0 && getProgress(selectedBook.id) < selectedBook.pages && (
+              <>
+                <DiamondDivider />
+                <button
+                  className="gold-btn"
+                  onClick={() => setConfirmRemoveBook(selectedBook)}
+                  style={{ width: "100%", justifyContent: "center", color: "#C0392B", borderColor: "rgba(192,57,43,0.3)" }}
+                >
+                  <X size={14} /> Remove from My Books
+                </button>
+              </>
+            )}
             {isAdmin && (
               <>
                 <DiamondDivider />
@@ -3481,6 +3510,15 @@ function LibraryPage() {
         title="Delete Book?"
         message={`This will permanently remove "${data.books.find(b => b.id === confirmDeleteBook)?.title}" and all associated reading progress.`}
         confirmLabel="Delete"
+      />
+
+      <ConfirmDialog
+        open={!!confirmRemoveBook}
+        onClose={() => setConfirmRemoveBook(null)}
+        onConfirm={() => removeFromMyBooks(confirmRemoveBook.id)}
+        title="Remove from My Books?"
+        message={`This clears your reading progress in "${confirmRemoveBook?.title}" and moves it back to Not Started. The book stays in the library for everyone else.${(data.readInvites || []).some(inv => inv.bookId === confirmRemoveBook?.id && inv.status === "active" && (inv.fromId === currentUser.id || inv.acceptedIds.includes(currentUser.id))) ? " Heads up: you're in an active group read with this book — your fireteam will see you back at 0 pages." : ""}`}
+        confirmLabel="Remove"
       />
 
       {/* Slot Machine Animation Overlay */}
