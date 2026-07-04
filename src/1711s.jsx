@@ -3099,6 +3099,58 @@ function LibraryPage() {
         <button className="gold-btn" onClick={() => setShowAddBook(true)}><Plus size={14} /> Add Book</button>
       </div>
 
+      {/* Currently Reading — hero card + remaining in-progress books */}
+      {readingBooks.length > 0 && (
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <BookOpen size={16} style={{ color: "#D4AF37" }} />
+            <span className="section-title">CURRENTLY READING ({readingBooks.length})</span>
+          </div>
+          {heroBook && (() => {
+            const progress = getProgress(heroBook.id);
+            const pct = Math.round((progress / heroBook.pages) * 100);
+            const heroGroupRead = (data.readInvites || []).some(inv =>
+              inv.bookId === heroBook.id && inv.status === "active" &&
+              (inv.fromId === currentUser.id || inv.acceptedIds.includes(currentUser.id))
+            );
+            return (
+              <Panel
+                glow={heroGroupRead ? "#2B9EB3" : "#D4AF37"}
+                onClick={() => { setSelectedBook(heroBook); setUpdatePage(String(progress)); }}
+                style={{ position: "relative", cursor: "pointer", marginBottom: 14 }}
+              >
+                {heroGroupRead && <div className="group-read-badge">GROUP READ</div>}
+                <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
+                  <BookCover book={heroBook} size={72} />
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <div style={{ color: "#D4AF37", fontSize: 10, fontWeight: 700, fontFamily: "'Rajdhani', sans-serif", letterSpacing: 2, marginBottom: 4 }}>
+                      CONTINUE READING
+                    </div>
+                    <div style={{ fontWeight: 700, color: "#E8E0D0", fontSize: 18, lineHeight: 1.3 }}>{heroBook.title}</div>
+                    <div style={{ color: "#6B6152", fontSize: 13, marginTop: 2 }}>{heroBook.author}</div>
+                    <div className="book-category-tag">{heroBook.category}</div>
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                        <span style={{ color: "#6B6152", fontSize: 12 }}>
+                          {progress}/{heroBook.pages} pages · {Math.max(0, heroBook.pages - progress)} to go
+                        </span>
+                        <span style={{ color: "#D4AF37", fontSize: 12, fontWeight: 600 }}>{pct}%</span>
+                      </div>
+                      <ProgressBar value={progress} max={heroBook.pages} color="#D4AF37" height={8} />
+                    </div>
+                  </div>
+                </div>
+              </Panel>
+            );
+          })()}
+          {readingBooks.length > 1 && (
+            <div className="book-grid">
+              {readingBooks.filter(b => b.id !== heroBook.id).map(renderBookCard)}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Active Group Reads */}
       {activeGroupReads.length > 0 && (
         <div style={{ marginBottom: 24 }}>
@@ -3239,6 +3291,25 @@ function LibraryPage() {
         </div>
       )}
 
+      {/* Search — filters the Not Started / Completed sections below */}
+      <div style={{ position: "relative", marginBottom: 12 }}>
+        <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#6B6152" }} />
+        <input
+          className="text-input"
+          type="text"
+          placeholder="Search books by title or author..."
+          value={bookSearch}
+          onChange={e => setBookSearch(e.target.value)}
+          style={{ paddingLeft: 34, margin: 0 }}
+        />
+        {bookSearch && (
+          <button onClick={() => setBookSearch("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#6B6152", cursor: "pointer" }}>
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
+      {/* Fireteam View toggle + category filters */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <button
           className={`filter-btn ${showFireteam ? "active" : ""}`}
@@ -3246,6 +3317,10 @@ function LibraryPage() {
         >
           <Users size={14} /> Fireteam View
         </button>
+        <div className="filter-divider" />
+        {["All", ...CATEGORIES].map(c => (
+          <button key={c} className={`filter-btn ${filter === c ? "active" : ""}`} onClick={() => setFilter(c)}>{c}</button>
+        ))}
       </div>
 
       {showFireteam ? (
@@ -3288,83 +3363,6 @@ function LibraryPage() {
         </div>
       ) : (
         <div>
-          {/* Currently Reading — hero card + remaining in-progress books */}
-          {readingBooks.length > 0 && (
-            <div style={{ marginBottom: 28 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                <BookOpen size={16} style={{ color: "#D4AF37" }} />
-                <span className="section-title">CURRENTLY READING ({readingBooks.length})</span>
-              </div>
-              {heroBook && (() => {
-                const progress = getProgress(heroBook.id);
-                const pct = Math.round((progress / heroBook.pages) * 100);
-                const heroGroupRead = (data.readInvites || []).some(inv =>
-                  inv.bookId === heroBook.id && inv.status === "active" &&
-                  (inv.fromId === currentUser.id || inv.acceptedIds.includes(currentUser.id))
-                );
-                return (
-                  <Panel
-                    glow={heroGroupRead ? "#2B9EB3" : "#D4AF37"}
-                    onClick={() => { setSelectedBook(heroBook); setUpdatePage(String(progress)); }}
-                    style={{ position: "relative", cursor: "pointer", marginBottom: 14 }}
-                  >
-                    {heroGroupRead && <div className="group-read-badge">GROUP READ</div>}
-                    <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
-                      <BookCover book={heroBook} size={72} />
-                      <div style={{ flex: 1, minWidth: 200 }}>
-                        <div style={{ color: "#D4AF37", fontSize: 10, fontWeight: 700, fontFamily: "'Rajdhani', sans-serif", letterSpacing: 2, marginBottom: 4 }}>
-                          CONTINUE READING
-                        </div>
-                        <div style={{ fontWeight: 700, color: "#E8E0D0", fontSize: 18, lineHeight: 1.3 }}>{heroBook.title}</div>
-                        <div style={{ color: "#6B6152", fontSize: 13, marginTop: 2 }}>{heroBook.author}</div>
-                        <div className="book-category-tag">{heroBook.category}</div>
-                        <div style={{ marginTop: 12 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                            <span style={{ color: "#6B6152", fontSize: 12 }}>
-                              {progress}/{heroBook.pages} pages · {Math.max(0, heroBook.pages - progress)} to go
-                            </span>
-                            <span style={{ color: "#D4AF37", fontSize: 12, fontWeight: 600 }}>{pct}%</span>
-                          </div>
-                          <ProgressBar value={progress} max={heroBook.pages} color="#D4AF37" height={8} />
-                        </div>
-                      </div>
-                    </div>
-                  </Panel>
-                );
-              })()}
-              {readingBooks.length > 1 && (
-                <div className="book-grid">
-                  {readingBooks.filter(b => b.id !== heroBook.id).map(renderBookCard)}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Search — filters the full library below (Not Started / Completed) */}
-          <div style={{ position: "relative", marginBottom: 16 }}>
-            <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#6B6152" }} />
-            <input
-              className="text-input"
-              type="text"
-              placeholder="Search books by title or author..."
-              value={bookSearch}
-              onChange={e => setBookSearch(e.target.value)}
-              style={{ paddingLeft: 34, margin: 0 }}
-            />
-            {bookSearch && (
-              <button onClick={() => setBookSearch("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#6B6152", cursor: "pointer" }}>
-                <X size={14} />
-              </button>
-            )}
-          </div>
-
-          {/* Category filters */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-            {["All", ...CATEGORIES].map(c => (
-              <button key={c} className={`filter-btn ${filter === c ? "active" : ""}`} onClick={() => setFilter(c)}>{c}</button>
-            ))}
-          </div>
-
           {unstartedBooks.length === 0 && completedBooks.length === 0 && (
             <div style={{ color: "#6B6152", fontSize: 13, fontStyle: "italic", padding: "24px 0", textAlign: "center" }}>
               No books match your search.
