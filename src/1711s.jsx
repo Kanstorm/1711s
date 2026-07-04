@@ -2743,13 +2743,14 @@ function LibraryPage() {
     showToast(`"${book?.title}" deleted from library`, "info");
   }
 
-  const filtered = data.books.filter(b => {
-    if (filter !== "All" && b.category !== filter) return false;
-    if (bookSearch.trim()) {
-      const q = bookSearch.toLowerCase().trim();
-      return b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q);
-    }
-    return true;
+  // The search bar and category filters sit below Currently Reading and only
+  // narrow the Not Started / Completed sections; Currently Reading always
+  // shows every in-progress book.
+  const filtered = data.books.filter(b => filter === "All" || b.category === filter);
+  const searched = filtered.filter(b => {
+    if (!bookSearch.trim()) return true;
+    const q = bookSearch.toLowerCase().trim();
+    return b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q);
   });
 
   // Partition the (filtered) library by the current user's reading status
@@ -2759,9 +2760,9 @@ function LibraryPage() {
     if (pg > 0) return "reading";
     return "unstarted";
   };
-  const readingBooks = filtered.filter(b => bookStatus(b) === "reading");
-  const unstartedBooks = filtered.filter(b => bookStatus(b) === "unstarted");
-  const completedBooks = filtered.filter(b => bookStatus(b) === "completed");
+  const readingBooks = data.books.filter(b => bookStatus(b) === "reading");
+  const unstartedBooks = searched.filter(b => bookStatus(b) === "unstarted");
+  const completedBooks = searched.filter(b => bookStatus(b) === "completed");
   // Hero = in-progress book closest to the finish line
   const heroBook = readingBooks.length > 0
     ? [...readingBooks].sort((a, b) =>
@@ -3238,23 +3239,6 @@ function LibraryPage() {
         </div>
       )}
 
-      <div style={{ position: "relative", marginBottom: 12 }}>
-        <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#6B6152" }} />
-        <input
-          className="text-input"
-          type="text"
-          placeholder="Search books by title or author..."
-          value={bookSearch}
-          onChange={e => setBookSearch(e.target.value)}
-          style={{ paddingLeft: 34, margin: 0 }}
-        />
-        {bookSearch && (
-          <button onClick={() => setBookSearch("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#6B6152", cursor: "pointer" }}>
-            <X size={14} />
-          </button>
-        )}
-      </div>
-
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <button
           className={`filter-btn ${showFireteam ? "active" : ""}`}
@@ -3262,10 +3246,6 @@ function LibraryPage() {
         >
           <Users size={14} /> Fireteam View
         </button>
-        <div className="filter-divider" />
-        {["All", ...CATEGORIES].map(c => (
-          <button key={c} className={`filter-btn ${filter === c ? "active" : ""}`} onClick={() => setFilter(c)}>{c}</button>
-        ))}
       </div>
 
       {showFireteam ? (
@@ -3308,12 +3288,6 @@ function LibraryPage() {
         </div>
       ) : (
         <div>
-          {filtered.length === 0 && (
-            <div style={{ color: "#6B6152", fontSize: 13, fontStyle: "italic", padding: "24px 0", textAlign: "center" }}>
-              No books match your search.
-            </div>
-          )}
-
           {/* Currently Reading — hero card + remaining in-progress books */}
           {readingBooks.length > 0 && (
             <div style={{ marginBottom: 28 }}>
@@ -3363,6 +3337,37 @@ function LibraryPage() {
                   {readingBooks.filter(b => b.id !== heroBook.id).map(renderBookCard)}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Search — filters the full library below (Not Started / Completed) */}
+          <div style={{ position: "relative", marginBottom: 16 }}>
+            <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#6B6152" }} />
+            <input
+              className="text-input"
+              type="text"
+              placeholder="Search books by title or author..."
+              value={bookSearch}
+              onChange={e => setBookSearch(e.target.value)}
+              style={{ paddingLeft: 34, margin: 0 }}
+            />
+            {bookSearch && (
+              <button onClick={() => setBookSearch("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#6B6152", cursor: "pointer" }}>
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Category filters */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+            {["All", ...CATEGORIES].map(c => (
+              <button key={c} className={`filter-btn ${filter === c ? "active" : ""}`} onClick={() => setFilter(c)}>{c}</button>
+            ))}
+          </div>
+
+          {unstartedBooks.length === 0 && completedBooks.length === 0 && (
+            <div style={{ color: "#6B6152", fontSize: 13, fontStyle: "italic", padding: "24px 0", textAlign: "center" }}>
+              No books match your search.
             </div>
           )}
 
