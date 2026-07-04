@@ -2707,6 +2707,7 @@ function LibraryPage() {
   const [confirmDeleteBook, setConfirmDeleteBook] = useState(null);
   const [slotAnim, setSlotAnim] = useState(null); // { oldValue, newValue, pagesAdded, bookTitle }
   const [showCompletedReads, setShowCompletedReads] = useState(false);
+  const [showCompletedBooks, setShowCompletedBooks] = useState(false);
 
   function startEditBook(book) {
     setEditingBook({ ...book });
@@ -2750,6 +2751,24 @@ function LibraryPage() {
     }
     return true;
   });
+
+  // Partition the (filtered) library by the current user's reading status
+  const bookStatus = book => {
+    const pg = data.readingProgress?.[currentUser.id]?.[book.id] || 0;
+    if (book.pages > 0 && pg >= book.pages) return "completed";
+    if (pg > 0) return "reading";
+    return "unstarted";
+  };
+  const readingBooks = filtered.filter(b => bookStatus(b) === "reading");
+  const unstartedBooks = filtered.filter(b => bookStatus(b) === "unstarted");
+  const completedBooks = filtered.filter(b => bookStatus(b) === "completed");
+  // Hero = in-progress book closest to the finish line
+  const heroBook = readingBooks.length > 0
+    ? [...readingBooks].sort((a, b) =>
+        (data.readingProgress?.[currentUser.id]?.[b.id] || 0) / b.pages -
+        (data.readingProgress?.[currentUser.id]?.[a.id] || 0) / a.pages
+      )[0]
+    : null;
 
   const isParticipant = inv => inv.fromId === currentUser.id || inv.acceptedIds.includes(currentUser.id);
 
@@ -2844,6 +2863,43 @@ function LibraryPage() {
 
   function getProgress(bookId) {
     return data.readingProgress?.[currentUser.id]?.[bookId] || 0;
+  }
+
+  function renderBookCard(book) {
+    const progress = getProgress(book.id);
+    const pct = Math.round((progress / book.pages) * 100);
+    const done = book.pages > 0 && progress >= book.pages;
+    const hasGroupRead = (data.readInvites || []).some(inv =>
+      inv.bookId === book.id && inv.status === "active" &&
+      (inv.fromId === currentUser.id || inv.acceptedIds.includes(currentUser.id))
+    );
+    return (
+      <Panel
+        key={book.id}
+        className={`book-card ${done ? "book-complete" : ""}`}
+        onClick={() => { setSelectedBook(book); setUpdatePage(String(progress)); }}
+        glow={done ? "#27AE60" : hasGroupRead ? "#2B9EB3" : undefined}
+      >
+        {hasGroupRead && <div className="group-read-badge">GROUP READ</div>}
+        <div className="book-cover-emoji"><BookCover book={book} size={36} /></div>
+        <div className="book-info">
+          <div className="book-title">{book.title}</div>
+          <div className="book-author">{book.author}</div>
+          <div className="book-category-tag">{book.category}</div>
+          {progress > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ color: "#6B6152", fontSize: 11 }}>{progress}/{book.pages} pages</span>
+                <span style={{ color: done ? "#27AE60" : "#D4AF37", fontSize: 11, fontWeight: 600 }}>
+                  {done ? "COMPLETE" : `${pct}%`}
+                </span>
+              </div>
+              <ProgressBar value={progress} max={book.pages} color={done ? "#27AE60" : "#D4AF37"} height={4} />
+            </div>
+          )}
+        </div>
+      </Panel>
+    );
   }
 
   function toggleInviteMember(memberId) {
@@ -3251,51 +3307,91 @@ function LibraryPage() {
           ))}
         </div>
       ) : (
-        <div className="book-grid">
-          {[...filtered].sort((a, b) => {
-            const progA = data.readingProgress?.[currentUser.id]?.[a.id] || 0;
-            const progB = data.readingProgress?.[currentUser.id]?.[b.id] || 0;
-            const inProgressA = progA > 0 && progA < a.pages;
-            const inProgressB = progB > 0 && progB < b.pages;
-            if (inProgressA && !inProgressB) return -1;
-            if (!inProgressA && inProgressB) return 1;
-            return 0;
-          }).map(book => {
-            const progress = getProgress(book.id);
-            const pct = Math.round((progress / book.pages) * 100);
-            const done = progress >= book.pages;
-            const hasGroupRead = (data.readInvites || []).some(inv =>
-              inv.bookId === book.id && inv.status === "active" &&
-              (inv.fromId === currentUser.id || inv.acceptedIds.includes(currentUser.id))
-            );
-            return (
-              <Panel
-                key={book.id}
-                className={`book-card ${done ? "book-complete" : ""}`}
-                onClick={() => { setSelectedBook(book); setUpdatePage(String(progress)); }}
-                glow={done ? "#27AE60" : hasGroupRead ? "#2B9EB3" : undefined}
-              >
-                {hasGroupRead && <div className="group-read-badge">GROUP READ</div>}
-                <div className="book-cover-emoji"><BookCover book={book} size={36} /></div>
-                <div className="book-info">
-                  <div className="book-title">{book.title}</div>
-                  <div className="book-author">{book.author}</div>
-                  <div className="book-category-tag">{book.category}</div>
-                  {progress > 0 && (
-                    <div style={{ marginTop: 8 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                        <span style={{ color: "#6B6152", fontSize: 11 }}>{progress}/{book.pages} pages</span>
-                        <span style={{ color: done ? "#27AE60" : "#D4AF37", fontSize: 11, fontWeight: 600 }}>
-                          {done ? "COMPLETE" : `${pct}%`}
-                        </span>
+        <div>
+          {filtered.length === 0 && (
+            <div style={{ color: "#6B6152", fontSize: 13, fontStyle: "italic", padding: "24px 0", textAlign: "center" }}>
+              No books match your search.
+            </div>
+          )}
+
+          {/* Currently Reading — hero card + remaining in-progress books */}
+          {readingBooks.length > 0 && (
+            <div style={{ marginBottom: 28 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <BookOpen size={16} style={{ color: "#D4AF37" }} />
+                <span className="section-title">CURRENTLY READING ({readingBooks.length})</span>
+              </div>
+              {heroBook && (() => {
+                const progress = getProgress(heroBook.id);
+                const pct = Math.round((progress / heroBook.pages) * 100);
+                const heroGroupRead = (data.readInvites || []).some(inv =>
+                  inv.bookId === heroBook.id && inv.status === "active" &&
+                  (inv.fromId === currentUser.id || inv.acceptedIds.includes(currentUser.id))
+                );
+                return (
+                  <Panel
+                    glow={heroGroupRead ? "#2B9EB3" : "#D4AF37"}
+                    onClick={() => { setSelectedBook(heroBook); setUpdatePage(String(progress)); }}
+                    style={{ position: "relative", cursor: "pointer", marginBottom: 14 }}
+                  >
+                    {heroGroupRead && <div className="group-read-badge">GROUP READ</div>}
+                    <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
+                      <BookCover book={heroBook} size={72} />
+                      <div style={{ flex: 1, minWidth: 200 }}>
+                        <div style={{ color: "#D4AF37", fontSize: 10, fontWeight: 700, fontFamily: "'Rajdhani', sans-serif", letterSpacing: 2, marginBottom: 4 }}>
+                          CONTINUE READING
+                        </div>
+                        <div style={{ fontWeight: 700, color: "#E8E0D0", fontSize: 18, lineHeight: 1.3 }}>{heroBook.title}</div>
+                        <div style={{ color: "#6B6152", fontSize: 13, marginTop: 2 }}>{heroBook.author}</div>
+                        <div className="book-category-tag">{heroBook.category}</div>
+                        <div style={{ marginTop: 12 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                            <span style={{ color: "#6B6152", fontSize: 12 }}>
+                              {progress}/{heroBook.pages} pages · {Math.max(0, heroBook.pages - progress)} to go
+                            </span>
+                            <span style={{ color: "#D4AF37", fontSize: 12, fontWeight: 600 }}>{pct}%</span>
+                          </div>
+                          <ProgressBar value={progress} max={heroBook.pages} color="#D4AF37" height={8} />
+                        </div>
                       </div>
-                      <ProgressBar value={progress} max={book.pages} color={done ? "#27AE60" : "#D4AF37"} height={4} />
                     </div>
-                  )}
+                  </Panel>
+                );
+              })()}
+              {readingBooks.length > 1 && (
+                <div className="book-grid">
+                  {readingBooks.filter(b => b.id !== heroBook.id).map(renderBookCard)}
                 </div>
-              </Panel>
-            );
-          })}
+              )}
+            </div>
+          )}
+
+          {/* Not Started */}
+          {unstartedBooks.length > 0 && (
+            <div style={{ marginBottom: 28 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <BookOpen size={16} style={{ color: "#6B6152" }} />
+                <span className="section-title">NOT STARTED ({unstartedBooks.length})</span>
+              </div>
+              <div className="book-grid">{unstartedBooks.map(renderBookCard)}</div>
+            </div>
+          )}
+
+          {/* Completed — collapsed by default, matching Completed Group Reads */}
+          {completedBooks.length > 0 && (
+            <div style={{ marginBottom: 28 }}>
+              <button
+                onClick={() => setShowCompletedBooks(s => !s)}
+                style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                <Check size={16} style={{ color: "#27AE60" }} />
+                <span className="section-title">COMPLETED ({completedBooks.length})</span>
+                <ChevronDown size={16} style={{ color: "#6B6152", transform: showCompletedBooks ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+              </button>
+              {showCompletedBooks && (
+                <div className="book-grid">{completedBooks.map(renderBookCard)}</div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
