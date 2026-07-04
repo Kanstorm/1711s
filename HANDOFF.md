@@ -156,19 +156,21 @@ InstallPage, App root (~7050).
 
 Recently shipped: bible tracker persistence fixes, group-read completed
 section, PWA + official logo, install guide page, safe-area/notch fix,
-RLS policy script, password reset flow.
+RLS policy script, password reset flow, RLS re-test (member + admin,
+verified against live API 2026-07-03 — all policies correct, no holes).
 
 Open, roughly in priority order:
-1. **Confirm `rls_policies.sql` has been run** and re-test the app as admin
-   and as a normal member (silent zero-row writes were widespread before).
-2. **Realtime** — an older snapshot had live forum updates via
+1. **Realtime** — an older snapshot had live forum updates via
    `supabase.channel`; that code is NOT in the repo. Group-read chat has
    never had realtime (messages appear only after navigation).
-3. **Sync-failure visibility** — sync errors only hit the console; surface a
+2. **Sync-failure visibility** — sync errors only hit the console; surface a
    toast on failed writes.
-4. **Confession quiz** — build it or retire the "Catechized" triumph.
-5. Ideas parked: reading plans/streaks, meeting scheduler, notifications
+3. **Confession quiz** — build it or retire the "Catechized" triumph.
+4. Ideas parked: reading plans/streaks, meeting scheduler, notifications
    bell, group-read pacing.
+
+Note: `triumph_progress`, `completed_seals`, and `activities` intentionally
+have no DELETE policy (the app only ever upserts/appends these).
 
 ---
 
